@@ -26,8 +26,6 @@ export default function Home() {
   const [businessData, setBusinessData] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<StoryResult | null>(null);
-  const [apiKey, setApiKey] = useState("");
-  const [showApiKeyInput, setShowApiKeyInput] = useState(true);
 
   const generateStory = async () => {
     if (!businessData.trim()) {
@@ -35,8 +33,9 @@ export default function Home() {
       return;
     }
 
-    if (!apiKey.trim()) {
-      toast.error("Please enter your OpenRouter API key");
+    const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+    if (!apiKey) {
+      toast.error("API key not configured");
       return;
     }
 
@@ -153,24 +152,7 @@ export default function Home() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Column: Input Area */}
           <div className="space-y-6">
-            {/* API Key Input */}
-            {showApiKeyInput && (
-              <Card className="p-4 border-accent/30 bg-card/50">
-                <label className="block text-sm font-medium text-foreground mb-2">
-                  OpenRouter API Key
-                </label>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="sk-or-..."
-                  className="w-full px-3 py-2 bg-background border border-border rounded-md text-foreground text-sm placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-                <p className="text-xs text-muted-foreground mt-2">
-                  Get your free API key at <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">openrouter.ai</a>
-                </p>
-              </Card>
-            )}
+
 
             {/* Data Input */}
             <div className="space-y-3">
