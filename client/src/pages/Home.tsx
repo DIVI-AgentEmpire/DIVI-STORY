@@ -27,7 +27,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [result, setResult] = useState<StoryResult | null>(null);
   const [apiKey, setApiKey] = useState("");
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
+  const [showApiKeyInput, setShowApiKeyInput] = useState(true);
 
   const generateStory = async () => {
     if (!businessData.trim()) {
@@ -36,7 +36,6 @@ export default function Home() {
     }
 
     if (!apiKey.trim()) {
-      setShowApiKeyInput(true);
       toast.error("Please enter your OpenRouter API key");
       return;
     }
