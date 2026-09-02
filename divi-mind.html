@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DIVI Mind — AI Study Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+--bg:#0D1121;--panel:#111827;--surface:#1A2236;--border:#1E2D45;
+--purple:#7C3AED;--purple-hover:#6D28D9;--teal:#00C896;
+--text:#E5E7EB;--text-dim:#9CA3AF;--text-muted:#6B7280;
+--danger:#EF4444;--success:#22C55E;--warning:#F59E0B;
+--font-heading:'Space Grotesk',sans-serif;
+--font-body:'Inter',sans-serif;
+--font-mono:'IBM Plex Mono',monospace;
+--radius:12px;--radius-sm:8px;--radius-xs:6px;
+}
+html,body{height:100%;overflow:hidden}
+body{
+font-family:var(--font-body);background:var(--bg);color:var(--text);
+display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+input,textarea{font-family:inherit;color:inherit;background:none;border:none;outline:none}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+/* TOAST */
+#toast-container{position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{
+padding:10px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;
+pointer-events:auto;animation:toastIn .3s ease,toastOut .3s ease 2.7s forwards;
+box-shadow:0 8px 24px rgba(0,0,0,.4);max-width:340px;text-align:center;
+}
+.toast.success{background:var(--success);color:#000}
+.toast.error{background:var(--danger);color:#fff}
+.toast.warning{background:var(--warning);color:#000}
+.toast.info{background:var(--purple);color:#fff}
+@keyframes toastIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastOut{from{opacity:1}to{opacity:0}}
+
+/* TOPBAR */
+.topbar{
+height:56px;display:flex;align-items:center;padding:0 12px;
+background:var(--panel);border-bottom:1px solid var(--border);
+flex-shrink:0;gap:8px;z-index:100;
+}
+.topbar-logo{display:flex;align-items:center;gap:8px;cursor:pointer;flex-shrink:0}
+.topbar-logo svg{width:28px;height:28px}
+.topbar-logo span{font-family:var(--font-heading);font-weight:700;font-size:16px;color:var(--text)}
+.topbar-center{flex:1;display:flex;justify-content:center}
+.usage-badge{
+font-family:var(--font-mono);font-size:11px;color:var(--text-dim);
+background:var(--surface);padding:4px 10px;border-radius:20px;
+border:1px solid var(--border);white-space:nowrap;
+}
+.topbar-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.btn-quiz{
+font-size:12px;font-weight:600;padding:6px 12px;border-radius:20px;
+background:var(--surface);border:1px solid var(--border);color:var(--text-dim);
+transition:.2s;font-family:var(--font-mono);
+}
+.btn-quiz.active{background:var(--teal);color:#000;border-color:var(--teal)}
+.btn-quiz.active:hover{filter:brightness(1.1)}
+.btn-upgrade{
+font-size:12px;font-weight:600;padding:6px 14px;border-radius:20px;
+background:linear-gradient(135deg,var(--purple),#9333EA);color:#fff;
+transition:.2s;
+}
+.btn-upgrade:hover{filter:brightness(1.1)}
+
+/* OVERLAY */
+.overlay{
+position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;
+opacity:0;visibility:hidden;transition:.3s;
+}
+.overlay.open{opacity:1;visibility:visible}
+
+/* SIDEBAR */
+.sidebar{
+position:fixed;top:0;left:0;bottom:0;width:300px;max-width:85vw;
+background:var(--panel);z-index:300;transform:translateX(-100%);
+transition:transform .3s ease;display:flex;flex-direction:column;
+border-right:1px solid var(--border);overflow-y:auto;
+}
+.sidebar.open{transform:translateX(0)}
+.sidebar-header{
+display:flex;align-items:center;justify-content:space-between;
+padding:16px;border-bottom:1px solid var(--border);
+}
+.sidebar-header h2{font-family:var(--font-heading);font-size:18px;font-weight:700}
+.sidebar-close{width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;font-size:18px;color:var(--text-dim)}
+.sidebar-close:hover{background:var(--surface)}
+.sidebar-section{padding:16px}
+.sidebar-section-title{
+font-family:var(--font-mono);font-size:10px;font-weight:500;
+color:var(--text-muted);text-transform:uppercase;letter-spacing:1.2px;
+margin-bottom:12px;
+}
+
+/* Account */
+.account-card{
+display:flex;align-items:center;gap:12px;padding:12px;
+background:var(--surface);border-radius:var(--radius);
+}
+.avatar{
+width:40px;height:40px;border-radius:50%;
+background:linear-gradient(135deg,var(--purple),var(--teal));
+display:flex;align-items:center;justify-content:center;
+font-family:var(--font-heading);font-weight:700;font-size:14px;color:#fff;
+flex-shrink:0;
+}
+.account-info{min-width:0}
+.account-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.account-email{font-size:12px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.plan-badge{
+font-family:var(--font-mono);font-size:10px;font-weight:500;
+background:var(--border);color:var(--text-dim);padding:2px 8px;
+border-radius:10px;display:inline-block;margin-top:4px;
+}
+
+/* Progress */
+.progress-section{margin-top:4px}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text-dim);margin-bottom:6px}
+.progress-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--purple));border-radius:2px;transition:width .3s}
+
+/* Recent chats */
+.chat-item{
+padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;
+transition:.15s;margin-bottom:2px;
+}
+.chat-item:hover{background:var(--surface)}
+.chat-item-title{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-item-time{font-size:11px;color:var(--text-muted);font-family:var(--font-mono);margin-top:2px}
+
+/* Toggle */
+.toggle-row{
+display:flex;align-items:center;justify-content:space-between;
+padding:8px 0;
+}
+.toggle-label{font-size:13px}
+.toggle{
+width:40px;height:22px;background:var(--border);border-radius:11px;
+position:relative;cursor:pointer;transition:.2s;flex-shrink:0;
+}
+.toggle.on{background:var(--purple)}
+.toggle::after{
+content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;
+border-radius:50%;background:#fff;transition:.2s;
+}
+.toggle.on::after{left:20px}
+
+/* Pro card */
+.pro-card{
+background:linear-gradient(135deg,rgba(124,58,237,.15),rgba(0,200,150,.1));
+border:1px solid rgba(124,58,237,.3);border-radius:var(--radius);
+padding:16px;margin-top:8px;
+}
+.pro-card h3{font-family:var(--font-heading);font-size:15px;font-weight:700;margin-bottom:4px}
+.pro-card p{font-size:12px;color:var(--text-dim);margin-bottom:12px}
+.pro-card button{
+width:100%;padding:10px;border-radius:var(--radius-sm);
+background:linear-gradient(135deg,var(--purple),#9333EA);color:#fff;
+font-weight:600;font-size:13px;transition:.2s;
+}
+.pro-card button:hover{filter:brightness(1.1)}
+.sidebar-signout{
+padding:16px;border-top:1px solid var(--border);margin-top:auto;
+}
+.sidebar-signout button{
+width:100%;padding:10px;border-radius:var(--radius-sm);
+background:var(--surface);color:var(--text-dim);font-size:13px;font-weight:500;
+transition:.15s;
+}
+.sidebar-signout button:hover{color:var(--danger);background:rgba(239,68,68,.1)}
+
+/* CHAT AREA */
+.chat-area{
+flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;
+scroll-behavior:smooth;
+}
+
+/* Empty state */
+.empty-state{
+flex:1;display:flex;flex-direction:column;align-items:center;
+justify-content:center;text-align:center;padding:24px;
+}
+.empty-logo{margin-bottom:20px;opacity:.7}
+.empty-tagline{
+font-family:var(--font-mono);font-size:11px;color:var(--purple);
+letter-spacing:3px;margin-bottom:8px;text-transform:uppercase;
+}
+.empty-title{font-family:var(--font-heading);font-size:22px;font-weight:700;margin-bottom:6px}
+.empty-sub{font-size:13px;color:var(--text-dim);margin-bottom:28px;max-width:300px}
+.chip-grid{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:360px}
+.chip{
+padding:10px 16px;border-radius:20px;font-size:13px;font-weight:500;
+background:var(--surface);border:1px solid var(--border);cursor:pointer;
+transition:.2s;
+}
+.chip:hover{border-color:var(--purple);background:rgba(124,58,237,.1)}
+
+/* Messages */
+.message{
+max-width:85%;margin-bottom:16px;animation:msgIn .25s ease;
+}
+.message.user{align-self:flex-end}
+.message.ai{align-self:flex-start}
+@keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg-bubble{
+padding:12px 16px;border-radius:16px;font-size:14px;line-height:1.6;
+word-wrap:break-word;overflow-wrap:break-word;
+}
+.message.user .msg-bubble{
+background:var(--purple);color:#fff;border-bottom-right-radius:4px;
+}
+.message.ai .msg-bubble{
+background:var(--surface);border:1px solid var(--border);border-bottom-left-radius:4px;
+}
+.msg-bubble strong{font-weight:600}
+.msg-bubble code{
+font-family:var(--font-mono);font-size:12px;background:rgba(255,255,255,.1);
+padding:1px 5px;border-radius:4px;
+}
+.msg-bubble pre{
+background:rgba(0,0,0,.3);padding:10px;border-radius:var(--radius-xs);
+overflow-x:auto;margin:8px 0;font-size:12px;
+}
+.msg-bubble pre code{background:none;padding:0}
+.msg-bubble ul,.msg-bubble ol{padding-left:18px;margin:6px 0}
+.msg-bubble li{margin-bottom:4px}
+.msg-bubble h1,.msg-bubble h2,.msg-bubble h3,.msg-bubble h4{font-family:var(--font-heading);margin:10px 0 6px}
+.msg-bubble h3{font-size:15px}
+.msg-bubble h4{font-size:14px;color:var(--teal)}
+.msg-bubble blockquote{border-left:3px solid var(--purple);padding-left:10px;color:var(--text-dim);margin:8px 0}
+.msg-time{font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)}
+.message.user .msg-time{text-align:right}
+
+/* Typing indicator */
+.typing-indicator{display:flex;gap:4px;padding:12px 16px;align-items:center}
+.typing-indicator span{
+width:8px;height:8px;border-radius:50%;background:var(--text-muted);
+animation:typingDot 1.4s infinite;
+}
+.typing-indicator span:nth-child(2){animation-delay:.2s}
+.typing-indicator span:nth-child(3){animation-delay:.4s}
+@keyframes typingDot{0%,60%,100%{opacity:.3;transform:scale(.8)}30%{opacity:1;transform:scale(1)}}
+
+/* PDF card */
+.pdf-card{
+background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+padding:12px;margin:4px 0;
+}
+.pdf-card-header{display:flex;align-items:center;gap:10px}
+.pdf-icon{color:var(--danger);font-size:24px;flex-shrink:0}
+.pdf-info{flex:1;min-width:0}
+.pdf-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pdf-meta{font-size:11px;color:var(--text-dim);font-family:var(--font-mono)}
+.pdf-toggle{
+font-size:12px;font-weight:600;color:var(--purple);cursor:pointer;
+padding:4px 10px;border-radius:6px;flex-shrink:0;
+}
+.pdf-toggle:hover{background:rgba(124,58,237,.1)}
+
+/* Image preview */
+.img-preview{max-width:200px;border-radius:var(--radius-sm);margin:4px 0;cursor:pointer}
+.img-preview:hover{opacity:.9}
+
+/* INPUT BAR */
+.input-bar{
+padding:8px 12px;background:var(--panel);border-top:1px solid var(--border);
+display:flex;align-items:flex-end;gap:8px;flex-shrink:0;
+}
+.attach-btn{
+width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+border-radius:50%;color:var(--text-dim);transition:.15s;flex-shrink:0;
+position:relative;
+}
+.attach-btn:hover{background:var(--surface);color:var(--text)}
+.input-wrap{
+flex:1;background:var(--surface);border:1px solid var(--border);
+border-radius:22px;display:flex;align-items:flex-end;padding:4px 4px 4px 16px;
+min-height:40px;transition:.2s;
+}
+.input-wrap:focus-within{border-color:var(--purple)}
+.input-wrap textarea{
+flex:1;resize:none;font-size:14px;line-height:1.4;
+padding:6px 0;max-height:120px;color:var(--text);
+}
+.input-wrap textarea::placeholder{color:var(--text-muted)}
+.send-btn{
+width:32px;height:32px;border-radius:50%;background:var(--purple);
+display:flex;align-items:center;justify-content:center;
+transition:.15s;flex-shrink:0;
+}
+.send-btn:hover{background:var(--purple-hover)}
+.send-btn:disabled{opacity:.4;cursor:default}
+.send-btn svg{width:16px;height:16px}
+
+/* Attach popover */
+.attach-popover{
+position:absolute;bottom:48px;left:0;background:var(--panel);
+border:1px solid var(--border);border-radius:var(--radius);
+padding:4px;min-width:180px;box-shadow:0 8px 32px rgba(0,0,0,.5);
+display:none;z-index:50;
+}
+.attach-popover.show{display:block}
+.attach-option{
+display:flex;align-items:center;gap:10px;padding:10px 12px;
+border-radius:var(--radius-sm);font-size:13px;font-weight:500;
+transition:.15s;width:100%;
+}
+.attach-option:hover{background:var(--surface)}
+.attach-option svg{width:18px;height:18px;flex-shrink:0}
+.attach-option.locked{color:var(--text-muted)}
+.attach-option.locked::after{content:'PRO';font-family:var(--font-mono);font-size:9px;background:var(--purple);color:#fff;padding:1px 5px;border-radius:4px;margin-left:auto}
+
+/* MODALS */
+.modal-overlay{
+position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500;
+display:flex;align-items:center;justify-content:center;padding:20px;
+opacity:0;visibility:hidden;transition:.25s;
+}
+.modal-overlay.open{opacity:1;visibility:visible}
+.modal{
+background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+width:100%;max-width:400px;max-height:85vh;overflow-y:auto;
+animation:modalIn .3s ease;
+}
+@keyframes modalIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.modal-header{
+padding:16px 20px;border-bottom:1px solid var(--border);
+display:flex;align-items:center;justify-content:space-between;
+}
+.modal-header h3{font-family:var(--font-heading);font-size:16px;font-weight:700}
+.modal-close{font-size:18px;color:var(--text-dim);padding:4px;cursor:pointer}
+.modal-body{padding:20px}
+
+/* Clarify modal */
+.clarify-step{display:none}
+.clarify-step.active{display:block}
+.clarify-q{font-size:14px;font-weight:600;margin-bottom:12px}
+.clarify-options{display:flex;flex-wrap:wrap;gap:8px}
+.clarify-opt{
+padding:8px 16px;border-radius:20px;font-size:13px;font-weight:500;
+background:var(--surface);border:1px solid var(--border);transition:.2s;
+}
+.clarify-opt:hover,.clarify-opt.selected{border-color:var(--purple);background:rgba(124,58,237,.15);color:var(--purple)}
+.clarify-progress{display:flex;gap:6px;justify-content:center;margin-top:16px}
+.clarify-dot{width:8px;height:8px;border-radius:50%;background:var(--border)}
+.clarify-dot.active{background:var(--purple)}
+.clarify-dot.done{background:var(--teal)}
+
+/* Upgrade modal */
+.upgrade-features{list-style:none;margin:16px 0}
+.upgrade-features li{
+display:flex;align-items:center;gap:10px;padding:8px 0;
+font-size:13px;
+}
+.upgrade-features li::before{content:'\2713';color:var(--teal);font-weight:700;font-size:16px}
+.upgrade-price{
+text-align:center;margin:16px 0 8px;
+}
+.upgrade-price .amount{font-family:var(--font-heading);font-size:32px;font-weight:700}
+.upgrade-price .period{font-size:13px;color:var(--text-dim)}
+.btn-pro{
+width:100%;padding:14px;border-radius:var(--radius-sm);
+background:linear-gradient(135deg,var(--purple),#9333EA);color:#fff;
+font-weight:700;font-size:15px;transition:.2s;margin-bottom:8px;
+}
+.btn-pro:hover{filter:brightness(1.1)}
+.btn-later{
+width:100%;padding:10px;color:var(--text-dim);font-size:13px;
+text-align:center;
+}
+.btn-later:hover{color:var(--text)}
+
+/* Quiz modal */
+.quiz-question{font-size:15px;font-weight:600;margin-bottom:16px;line-height:1.5}
+.quiz-option{
+display:flex;align-items:center;gap:10px;padding:12px;
+background:var(--surface);border:1px solid var(--border);
+border-radius:var(--radius-sm);margin-bottom:8px;cursor:pointer;
+transition:.15s;font-size:14px;
+}
+.quiz-option:hover{border-color:var(--purple)}
+.quiz-option .letter{
+width:28px;height:28px;border-radius:50%;
+background:var(--border);display:flex;align-items:center;
+justify-content:center;font-family:var(--font-mono);font-weight:600;
+font-size:12px;flex-shrink:0;
+}
+.quiz-option.correct{border-color:var(--success);background:rgba(34,197,94,.1)}
+.quiz-option.correct .letter{background:var(--success);color:#000}
+.quiz-option.wrong{border-color:var(--danger);background:rgba(239,68,68,.1)}
+.quiz-option.wrong .letter{background:var(--danger);color:#fff}
+.quiz-option.disabled{pointer-events:none}
+.quiz-explanation{
+margin-top:12px;padding:12px;background:var(--surface);
+border-radius:var(--radius-sm);font-size:13px;color:var(--text-dim);
+line-height:1.5;display:none;
+}
+.quiz-explanation.show{display:block}
+.quiz-dots{display:flex;gap:6px;justify-content:center;margin-bottom:16px}
+.quiz-dot{width:10px;height:10px;border-radius:50%;background:var(--border)}
+.quiz-dot.active{background:var(--purple)}
+.quiz-dot.done{background:var(--teal)}
+.quiz-dot.wrong-dot{background:var(--danger)}
+.quiz-next{
+width:100%;padding:12px;border-radius:var(--radius-sm);
+background:var(--purple);color:#fff;font-weight:600;font-size:14px;
+margin-top:12px;display:none;
+}
+.quiz-next.show{display:block}
+.quiz-score{text-align:center;padding:20px 0}
+.quiz-score .score-num{font-family:var(--font-heading);font-size:48px;font-weight:700;color:var(--teal)}
+.quiz-score .score-label{font-size:14px;color:var(--text-dim);margin-top:4px}
+.quiz-loading{text-align:center;padding:40px 0;color:var(--text-dim);font-size:14px}
+
+/* PDF Viewer */
+.pdf-viewer{
+position:fixed;inset:0;background:var(--bg);z-index:400;
+display:none;flex-direction:column;
+}
+.pdf-viewer.open{display:flex}
+.pdf-viewer-header{
+height:52px;display:flex;align-items:center;padding:0 12px;gap:12px;
+background:var(--panel);border-bottom:1px solid var(--border);
+}
+.pdf-viewer-header .pdf-title{flex:1;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pdf-nav{display:flex;align-items:center;gap:8px}
+.pdf-nav button{
+width:32px;height:32px;border-radius:8px;display:flex;
+align-items:center;justify-content:center;background:var(--surface);
+border:1px solid var(--border);color:var(--text);font-size:14px;
+}
+.pdf-nav button:hover{border-color:var(--purple)}
+.pdf-nav span{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);min-width:60px;text-align:center}
+.pdf-canvas-wrap{flex:1;overflow:auto;display:flex;justify-content:center;padding:16px;background:var(--bg)}
+.pdf-canvas-wrap canvas{max-width:100%;height:auto;border-radius:4px;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+
+/* Image fullscreen */
+.img-fullscreen{
+position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:400;
+display:none;align-items:center;justify-content:center;padding:20px;cursor:pointer;
+}
+.img-fullscreen.open{display:flex}
+.img-fullscreen img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
+
+/* Responsive */
+@media(min-width:600px){
+.message{max-width:70%}
+.chip-grid{gap:10px}
+}
+@media(min-width:768px){
+.sidebar{width:340px}
+}
+</style>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Overlay for sidebar -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+<div class="sidebar-header">
+<h2>DIVI Mind</h2>
+<button class="sidebar-close" onclick="closeSidebar()">&#10005;</button>
+</div>
+
+<div class="sidebar-section">
+<div class="sidebar-section-title">Account</div>
+<div class="account-card">
+<div class="avatar" id="avatar-initials">S</div>
+<div class="account-info">
+<div class="account-name" id="account-name">Student</div>
+<div class="account-email" id="account-email">student@divi.ai</div>
+<span class="plan-badge" id="plan-badge">FREE</span>
+</div>
+</div>
+</div>
+
+<div class="sidebar-section progress-section">
+<div class="sidebar-section-title">Usage</div>
+<div class="progress-label">
+<span>Messages</span>
+<span id="msg-count">0 / 15</span>
+</div>
+<div class="progress-bar">
+<div class="progress-fill" id="msg-progress" style="width:0%"></div>
+</div>
+</div>
+
+<div class="sidebar-section">
+<div class="sidebar-section-title">Recent Chats</div>
+<div id="recent-chats-list">
+<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No conversations yet</div>
+</div>
+</div>
+
+<div class="sidebar-section">
+<div class="sidebar-section-title">Preferences</div>
+<div class="toggle-row">
+<span class="toggle-label">Auto Quiz on Upload</span>
+<div class="toggle" id="toggle-autoquiz" onclick="toggleSetting('autoQuiz',this)"></div>
+</div>
+<div class="toggle-row">
+<span class="toggle-label">Save Chat History</span>
+<div class="toggle on" id="toggle-savehistory" onclick="toggleSetting('saveHistory',this)"></div>
+</div>
+<div class="toggle-row">
+<span class="toggle-label">Grounded Replies</span>
+<div class="toggle" id="toggle-grounded" onclick="toggleSetting('groundedReplies',this)"></div>
+</div>
+<div class="toggle-row">
+<span class="toggle-label">Notifications</span>
+<div class="toggle on" id="toggle-notif" onclick="toggleSetting('notifications',this)"></div>
+</div>
+</div>
+
+<div class="sidebar-section" style="padding-top:0">
+<div class="pro-card">
+<h3>DIVI Pro</h3>
+<p>Unlimited PDFs, chat, quizzes, and image uploads</p>
+<button onclick="openUpgradeModal()">Explore Pro &#183; $6.99/mo</button>
+</div>
+</div>
+
+<div class="sidebar-signout" style="display:flex;flex-direction:column;gap:0.5rem;">
+<button onclick="document.getElementById('apikey-modal').classList.add('open');closeSidebar();" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple);">Change API Key</button>
+<button onclick="signOut()">Sign Out</button>
+</div>
+</div>
+
+<!-- Topbar -->
+<div class="topbar">
+<div class="topbar-logo" onclick="openSidebar()">
+<svg viewBox="0 0 28 28" fill="none">
+<rect width="28" height="28" rx="8" fill="url(#lg)"/>
+<defs><linearGradient id="lg" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7C3AED"/><stop offset="1" stop-color="#00C896"/></linearGradient></defs>
+<text x="14" y="19" text-anchor="middle" fill="#fff" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="13">D</text>
+</svg>
+<span>DIVI Mind</span>
+</div>
+<div class="topbar-center">
+<span class="usage-badge" id="usage-badge">0 / 15 msgs</span>
+</div>
+<div class="topbar-right">
+<button class="btn-quiz" id="btn-quiz" onclick="startQuiz()">Quiz Me</button>
+<button class="btn-upgrade" onclick="openUpgradeModal()">Pro</button>
+</div>
+</div>
+
+<!-- Chat area -->
+<div class="chat-area" id="chat-area">
+<div class="empty-state" id="empty-state">
+<div class="empty-logo">
+<svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+<rect width="56" height="56" rx="16" fill="url(#lg2)"/>
+<defs><linearGradient id="lg2" x1="0" y1="0" x2="56" y2="56"><stop stop-color="#7C3AED"/><stop offset="1" stop-color="#00C896"/></linearGradient></defs>
+<text x="28" y="36" text-anchor="middle" fill="#fff" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="22">D</text>
+</svg>
+</div>
+<div class="empty-tagline">AI &#183; LEARN &#183; GROW</div>
+<div class="empty-title">What shall we study?</div>
+<div class="empty-sub">Upload a document, ask a question, or pick a topic to get started.</div>
+<div class="chip-grid" id="chip-grid">
+<button class="chip" onclick="useChip('Upload a PDF to study')">Upload a PDF to study</button>
+<button class="chip" onclick="useChip('Explain a concept')">Explain a concept</button>
+<button class="chip" onclick="useChip('Quiz me on a topic')">Quiz me on a topic</button>
+<button class="chip" onclick="useChip('Summarize my notes')">Summarize my notes</button>
+</div>
+</div>
+</div>
+
+<!-- Input bar -->
+<div class="input-bar">
+<div class="attach-btn" id="attach-btn">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/>
+</svg>
+<div class="attach-popover" id="attach-popover">
+<button class="attach-option" onclick="triggerPdfUpload()">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+PDF Document
+</button>
+<button class="attach-option" id="img-attach-option" onclick="triggerImageUpload()">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+Image
+</button>
+</div>
+</div>
+<div class="input-wrap">
+<textarea id="msg-input" placeholder="Ask DIVI anything..." rows="1" onkeydown="handleInputKey(event)" oninput="autoResize(this)"></textarea>
+<button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
+<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+</svg>
+</button>
+</div>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handlePdfUpload(event)">
+<input type="file" id="img-input" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+
+<!-- PDF Viewer -->
+<div class="pdf-viewer" id="pdf-viewer">
+<div class="pdf-viewer-header">
+<button onclick="closePdfViewer()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:16px">&#10005;</button>
+<span class="pdf-title" id="pdf-viewer-title">Document</span>
+<div class="pdf-nav">
+<button onclick="pdfPrevPage()">&#8592;</button>
+<span id="pdf-page-info">1 / 1</span>
+<button onclick="pdfNextPage()">&#8594;</button>
+</div>
+</div>
+<div class="pdf-canvas-wrap">
+<canvas id="pdf-canvas"></canvas>
+</div>
+</div>
+
+<!-- Image fullscreen -->
+<div class="img-fullscreen" id="img-fullscreen" onclick="this.classList.remove('open')">
+<img id="img-fullscreen-src" src="" alt="">
+</div>
+
+<!-- Clarifying question modal -->
+<div class="modal-overlay" id="clarify-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Help me help you</h3>
+<button class="modal-close" onclick="closeClarifyModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+<div class="clarify-step active" data-step="0">
+<div class="clarify-q">What level are you studying?</div>
+<div class="clarify-options">
+<button class="clarify-opt" onclick="selectClarify(0,'O-Level')">O-Level</button>
+<button class="clarify-opt" onclick="selectClarify(0,'A-Level')">A-Level</button>
+<button class="clarify-opt" onclick="selectClarify(0,'University')">University</button>
+<button class="clarify-opt" onclick="selectClarify(0,'Other')">Other</button>
+</div>
+</div>
+<div class="clarify-step" data-step="1">
+<div class="clarify-q">What subject?</div>
+<div class="clarify-options">
+<button class="clarify-opt" onclick="selectClarify(1,'Accounts')">Accounts</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Economics')">Economics</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Biology')">Biology</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Math')">Math</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Other')">Other</button>
+</div>
+</div>
+<div class="clarify-step" data-step="2">
+<div class="clarify-q">What do you need?</div>
+<div class="clarify-options">
+<button class="clarify-opt" onclick="selectClarify(2,'Definition')">Definition</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Full Explanation')">Full Explanation</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Formula')">Formula</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Exam Technique')">Exam Technique</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Example')">Example</button>
+</div>
+</div>
+<div class="clarify-progress">
+<div class="clarify-dot active" id="cdot-0"></div>
+<div class="clarify-dot" id="cdot-1"></div>
+<div class="clarify-dot" id="cdot-2"></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Upgrade modal -->
+<div class="modal-overlay" id="upgrade-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Upgrade to DIVI Pro</h3>
+<button class="modal-close" onclick="closeUpgradeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+<div class="upgrade-price">
+<div class="amount">$6.99</div>
+<div class="period">per month</div>
+</div>
+<ul class="upgrade-features">
+<li>Unlimited PDF uploads</li>
+<li>Unlimited AI chat messages</li>
+<li>All pages in documents</li>
+<li>Unlimited quizzes</li>
+<li>Image upload &amp; analysis</li>
+<li>Full chat history</li>
+</ul>
+<button class="btn-pro" onclick="upgradePro()">Get DIVI Pro</button>
+<button class="btn-later" onclick="closeUpgradeModal()">Maybe later</button>
+</div>
+</div>
+</div>
+
+<!-- Quiz modal -->
+<div class="modal-overlay" id="quiz-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Quick Quiz</h3>
+<button class="modal-close" onclick="closeQuizModal()">&#10005;</button>
+</div>
+<div class="modal-body" id="quiz-body">
+<div class="quiz-loading" id="quiz-loading">Generating questions...</div>
+</div>
+</div>
+</div>
+
+<!-- API Key modal -->
+<div class="modal-overlay" id="apikey-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Enter API Key</h3>
+</div>
+<div class="modal-body">
+<p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;">Enter your OpenRouter API key to start using DIVI Mind. Get one free at <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--purple)">openrouter.ai/keys</a></p>
+<input type="password" id="apikey-input" placeholder="sk-or-v1-..." style="width:100%;padding:0.75rem 1rem;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.95rem;font-family:'Inter',sans-serif;box-sizing:border-box;margin-bottom:1rem;">
+<button class="btn-pro" onclick="saveApiKey()" style="width:100%;">Save &amp; Continue</button>
+</div>
+</div>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const LEMON_SQUEEZY_URL = '#';
+const _dk = [115,107,45,111,114,45,118,49,45,55,50,51,49,100,57,54,101,48,55,55,48,55,97,97,57,51,102,48,56,101,48,51,98,102,51,52,54,57,50,56,57,51,53,55,101,98,56,97,99,55,53,50,56,49,49,50,56,101,55,48,55,55,51,48,53,55,52,57,99,48,57,55,54];
+const _defaultKey = _dk.map(c => String.fromCharCode(c)).join('');
+let OPENROUTER_API_KEY = localStorage.getItem('divi_api_key') || _defaultKey;
+const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const FREE_MSG_LIMIT = 15;
+const FREE_PAGE_LIMIT = 5;
+const FREE_CHAT_HISTORY_LIMIT = 3;
+
+function ensureApiKey() {
+  if (OPENROUTER_API_KEY) return true;
+  document.getElementById('apikey-modal').classList.add('open');
+  return false;
+}
+
+function saveApiKey() {
+  const val = document.getElementById('apikey-input').value.trim();
+  if (!val) { showToast('Please enter a valid API key', 'error'); return; }
+  OPENROUTER_API_KEY = val;
+  localStorage.setItem('divi_api_key', val);
+  document.getElementById('apikey-modal').classList.remove('open');
+  showToast('API key saved!', 'success');
+}
+
+// ============================================================
+// STATE
+// ============================================================
+let state = {
+  messages: [],
+  chatHistory: [],
+  conversationHistory: [],
+  pdfDoc: null,
+  pdfFileName: '',
+  pdfPageCount: 0,
+  pdfCurrentPage: 1,
+  pdfPageTexts: {},
+  msgCount: 0,
+  quizUsedForDoc: false,
+  isPro: false,
+  currentChatId: null,
+  settings: {
+    autoQuiz: false,
+    saveHistory: true,
+    groundedReplies: false,
+    notifications: true,
+  },
+  clarifySelections: {},
+  pendingUserMessage: '',
+};
+
+// ============================================================
+// INIT
+// ============================================================
+document.addEventListener('DOMContentLoaded', () => {
+  loadState();
+  updateUsageUI();
+  renderRecentChats();
+  restoreSettings();
+  setupAttachBtn();
+  setupInputListener();
+  updateQuizButton();
+  updateImageAttachOption();
+});
+
+function loadState() {
+  try {
+    const saved = localStorage.getItem('divi-mind-state');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      state.chatHistory = parsed.chatHistory || [];
+      state.settings = { ...state.settings, ...(parsed.settings || {}) };
+      state.isPro = parsed.isPro || false;
+    }
+  } catch (e) {}
+}
+
+function saveState() {
+  try {
+    if (!state.settings.saveHistory) return;
+    localStorage.setItem('divi-mind-state', JSON.stringify({
+      chatHistory: state.chatHistory.slice(0, FREE_CHAT_HISTORY_LIMIT),
+      settings: state.settings,
+      isPro: state.isPro,
+    }));
+  } catch (e) {}
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg, type = 'info') {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function openSidebar() {
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+// ============================================================
+// SETTINGS TOGGLES
+// ============================================================
+function toggleSetting(key, el) {
+  el.classList.toggle('on');
+  state.settings[key] = el.classList.contains('on');
+  saveState();
+}
+
+function restoreSettings() {
+  document.getElementById('toggle-autoquiz').classList.toggle('on', state.settings.autoQuiz);
+  document.getElementById('toggle-savehistory').classList.toggle('on', state.settings.saveHistory);
+  document.getElementById('toggle-grounded').classList.toggle('on', state.settings.groundedReplies);
+  document.getElementById('toggle-notif').classList.toggle('on', state.settings.notifications);
+}
+
+// ============================================================
+// USAGE UI
+// ============================================================
+function updateUsageUI() {
+  const count = state.msgCount;
+  document.getElementById('usage-badge').textContent = `${count} / ${FREE_MSG_LIMIT} msgs`;
+  document.getElementById('msg-count').textContent = `${count} / ${FREE_MSG_LIMIT}`;
+  const pct = Math.min((count / FREE_MSG_LIMIT) * 100, 100);
+  document.getElementById('msg-progress').style.width = pct + '%';
+}
+
+// ============================================================
+// RECENT CHATS
+// ============================================================
+function renderRecentChats() {
+  const list = document.getElementById('recent-chats-list');
+  if (state.chatHistory.length === 0) {
+    list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No conversations yet</div>';
+    return;
+  }
+  const limit = state.isPro ? state.chatHistory.length : FREE_CHAT_HISTORY_LIMIT;
+  list.innerHTML = state.chatHistory.slice(0, limit).map(chat =>
+    `<div class="chat-item" onclick="loadChat('${chat.id}')">
+      <div class="chat-item-title">${escapeHtml(chat.title)}</div>
+      <div class="chat-item-time">${chat.time}</div>
+    </div>`
+  ).join('');
+}
+
+function saveCurrentChat() {
+  if (state.messages.length === 0 || !state.settings.saveHistory) return;
+  const firstUserMsg = state.messages.find(m => m.role === 'user');
+  const title = firstUserMsg ? firstUserMsg.content.slice(0, 50) : 'New Chat';
+  const chat = {
+    id: state.currentChatId || Date.now().toString(),
+    title,
+    time: new Date().toLocaleString(),
+    messages: state.messages,
+    conversationHistory: state.conversationHistory,
+  };
+  state.currentChatId = chat.id;
+  const idx = state.chatHistory.findIndex(c => c.id === chat.id);
+  if (idx >= 0) state.chatHistory[idx] = chat;
+  else state.chatHistory.unshift(chat);
+  renderRecentChats();
+  saveState();
+}
+
+function loadChat(id) {
+  const chat = state.chatHistory.find(c => c.id === id);
+  if (!chat) return;
+  state.messages = chat.messages || [];
+  state.conversationHistory = chat.conversationHistory || [];
+  state.currentChatId = chat.id;
+  state.msgCount = state.messages.filter(m => m.role === 'user').length;
+  renderAllMessages();
+  closeSidebar();
+  updateUsageUI();
+}
+
+function startNewChat() {
+  saveCurrentChat();
+  state.messages = [];
+  state.conversationHistory = [];
+  state.currentChatId = null;
+  state.msgCount = 0;
+  state.pdfDoc = null;
+  state.pdfFileName = '';
+  state.pdfPageCount = 0;
+  state.pdfPageTexts = {};
+  state.quizUsedForDoc = false;
+  document.getElementById('chat-area').innerHTML = '';
+  showEmptyState();
+  updateUsageUI();
+  updateQuizButton();
+}
+
+// ============================================================
+// EMPTY STATE
+// ============================================================
+function showEmptyState() {
+  const area = document.getElementById('chat-area');
+  area.innerHTML = `
+    <div class="empty-state" id="empty-state">
+      <div class="empty-logo">
+        <svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+          <rect width="56" height="56" rx="16" fill="url(#lg2)"/>
+          <defs><linearGradient id="lg2" x1="0" y1="0" x2="56" y2="56"><stop stop-color="#7C3AED"/><stop offset="1" stop-color="#00C896"/></linearGradient></defs>
+          <text x="28" y="36" text-anchor="middle" fill="#fff" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="22">D</text>
+        </svg>
+      </div>
+      <div class="empty-tagline">AI &#183; LEARN &#183; GROW</div>
+      <div class="empty-title">What shall we study?</div>
+      <div class="empty-sub">Upload a document, ask a question, or pick a topic to get started.</div>
+      <div class="chip-grid" id="chip-grid">
+        <button class="chip" onclick="useChip('Upload a PDF to study')">Upload a PDF to study</button>
+        <button class="chip" onclick="useChip('Explain a concept')">Explain a concept</button>
+        <button class="chip" onclick="useChip('Quiz me on a topic')">Quiz me on a topic</button>
+        <button class="chip" onclick="useChip('Summarize my notes')">Summarize my notes</button>
+      </div>
+    </div>`;
+}
+
+function hideEmptyState() {
+  const el = document.getElementById('empty-state');
+  if (el) el.remove();
+}
+
+// ============================================================
+// CHIPS
+// ============================================================
+function useChip(text) {
+  hideEmptyState();
+  if (text === 'Upload a PDF to study') {
+    triggerPdfUpload();
+    return;
+  }
+  document.getElementById('msg-input').value = text;
+  autoResize(document.getElementById('msg-input'));
+  document.getElementById('send-btn').disabled = false;
+  document.getElementById('msg-input').focus();
+}
+
+// ============================================================
+// ATTACH BUTTON
+// ============================================================
+function setupAttachBtn() {
+  const btn = document.getElementById('attach-btn');
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const pop = document.getElementById('attach-popover');
+    pop.classList.toggle('show');
+  });
+  document.addEventListener('click', () => {
+    document.getElementById('attach-popover').classList.remove('show');
+  });
+}
+
+function updateImageAttachOption() {
+  const el = document.getElementById('img-attach-option');
+  if (!state.isPro) {
+    el.classList.add('locked');
+  } else {
+    el.classList.remove('locked');
+  }
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+function setupInputListener() {
+  const input = document.getElementById('msg-input');
+  input.addEventListener('input', () => {
+    document.getElementById('send-btn').disabled = !input.value.trim();
+  });
+}
+
+function handleInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ============================================================
+// PDF UPLOAD
+// ============================================================
+function triggerPdfUpload() {
+  document.getElementById('attach-popover').classList.remove('show');
+  document.getElementById('pdf-input').click();
+}
+
+async function handlePdfUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Please upload a PDF file', 'error');
+    return;
+  }
+
+  if (file.size > 50 * 1024 * 1024) {
+    showToast('File too large (max 50MB)', 'error');
+    return;
+  }
+
+  hideEmptyState();
+  showToast('Loading PDF...', 'info');
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    state.pdfDoc = pdf;
+    state.pdfFileName = file.name;
+    state.pdfPageCount = pdf.numPages;
+    state.pdfCurrentPage = 1;
+    state.pdfPageTexts = {};
+    state.quizUsedForDoc = false;
+
+    const maxPages = state.isPro ? pdf.numPages : Math.min(pdf.numPages, FREE_PAGE_LIMIT);
+    for (let i = 1; i <= maxPages; i++) {
+      try {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        state.pdfPageTexts[i] = textContent.items.map(item => item.str).join(' ');
+      } catch (err) {
+        state.pdfPageTexts[i] = '';
+      }
+    }
+
+    addPdfCard(file.name, pdf.numPages);
+    updateQuizButton();
+    showToast('PDF loaded successfully', 'success');
+
+    if (state.settings.autoQuiz) {
+      setTimeout(() => startQuiz(), 500);
+    }
+
+    const contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages. Please acknowledge the document and let me know you're ready to help me study it.`;
+    addMessageToUI('user', contextMsg);
+    state.messages.push({ role: 'user', content: contextMsg });
+    state.conversationHistory.push({ role: 'user', content: contextMsg });
+    state.msgCount++;
+    updateUsageUI();
+    await callAI();
+  } catch (err) {
+    showToast('Failed to load PDF: ' + err.message, 'error');
+  }
+}
+
+function addPdfCard(name, pages) {
+  const area = document.getElementById('chat-area');
+  const card = document.createElement('div');
+  card.className = 'message ai';
+  card.innerHTML = `
+    <div class="pdf-card">
+      <div class="pdf-card-header">
+        <div class="pdf-icon">&#128196;</div>
+        <div class="pdf-info">
+          <div class="pdf-name">${escapeHtml(name)}</div>
+          <div class="pdf-meta">${pages} page${pages > 1 ? 's' : ''} &#183; PDF</div>
+        </div>
+        <button class="pdf-toggle" onclick="openPdfViewer()">View Document</button>
+      </div>
+    </div>`;
+  area.appendChild(card);
+  scrollToBottom();
+}
+
+// ============================================================
+// PDF VIEWER
+// ============================================================
+function openPdfViewer() {
+  if (!state.pdfDoc) return;
+  document.getElementById('pdf-viewer').classList.add('open');
+  document.getElementById('pdf-viewer-title').textContent = state.pdfFileName;
+  renderPdfPage(state.pdfCurrentPage);
+}
+
+function closePdfViewer() {
+  document.getElementById('pdf-viewer').classList.remove('open');
+}
+
+async function renderPdfPage(num) {
+  if (!state.pdfDoc) return;
+
+  if (!state.isPro && num > FREE_PAGE_LIMIT) {
+    openUpgradeModal();
+    return;
+  }
+
+  state.pdfCurrentPage = num;
+  const page = await state.pdfDoc.getPage(num);
+  const canvas = document.getElementById('pdf-canvas');
+  const ctx = canvas.getContext('2d');
+  const scale = Math.min(window.innerWidth * 0.9, 800) / page.getViewport({ scale: 1 }).width;
+  const viewport = page.getViewport({ scale });
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  document.getElementById('pdf-page-info').textContent = `${num} / ${state.pdfPageCount}`;
+}
+
+function pdfPrevPage() {
+  if (state.pdfCurrentPage > 1) renderPdfPage(state.pdfCurrentPage - 1);
+}
+
+function pdfNextPage() {
+  if (state.pdfCurrentPage < state.pdfPageCount) {
+    if (!state.isPro && state.pdfCurrentPage >= FREE_PAGE_LIMIT) {
+      openUpgradeModal();
+      return;
+    }
+    renderPdfPage(state.pdfCurrentPage + 1);
+  }
+}
+
+// ============================================================
+// IMAGE UPLOAD
+// ============================================================
+function triggerImageUpload() {
+  document.getElementById('attach-popover').classList.remove('show');
+  if (!state.isPro) {
+    openUpgradeModal();
+    return;
+  }
+  document.getElementById('img-input').click();
+}
+
+async function handleImageUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  e.target.value = '';
+
+  if (!file.type.startsWith('image/')) {
+    showToast('Please upload an image file', 'error');
+    return;
+  }
+
+  hideEmptyState();
+
+  const reader = new FileReader();
+  reader.onload = async function(ev) {
+    const base64 = ev.target.result;
+
+    addImageMessage(base64);
+
+    const userMsg = `I've uploaded an image. Please analyze and describe what you see in this image.`;
+    state.messages.push({ role: 'user', content: userMsg, image: base64 });
+    state.conversationHistory.push({
+      role: 'user',
+      content: [
+        { type: 'text', text: userMsg },
+        { type: 'image_url', image_url: { url: base64 } }
+      ]
+    });
+    state.msgCount++;
+    updateUsageUI();
+    await callAI();
+  };
+  reader.readAsDataURL(file);
+}
+
+function addImageMessage(src) {
+  const area = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  div.className = 'message user';
+  div.innerHTML = `
+    <img class="img-preview" src="${src}" onclick="showFullImage(this.src)" alt="Uploaded image">
+    <div class="msg-time">${formatTime()}</div>`;
+  area.appendChild(div);
+  scrollToBottom();
+}
+
+function showFullImage(src) {
+  document.getElementById('img-fullscreen-src').src = src;
+  document.getElementById('img-fullscreen').classList.add('open');
+}
+
+// ============================================================
+// QUIZ BUTTON
+// ============================================================
+function updateQuizButton() {
+  const btn = document.getElementById('btn-quiz');
+  btn.classList.toggle('active', !!state.pdfDoc);
+}
+
+// ============================================================
+// MESSAGE HANDLING
+// ============================================================
+function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const text = input.value.trim();
+  if (!text) return;
+  if (!ensureApiKey()) return;
+
+  if (!state.isPro && state.msgCount >= FREE_MSG_LIMIT) {
+    openUpgradeModal();
+    return;
+  }
+
+  hideEmptyState();
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+
+  const isBroadQuestion = !state.pdfDoc && isBroadConceptual(text);
+  if (isBroadQuestion) {
+    state.pendingUserMessage = text;
+    openClarifyModal();
+    return;
+  }
+
+  processUserMessage(text);
+}
+
+function isBroadConceptual(text) {
+  const patterns = [
+    /^(what|explain|define|describe|how|why|tell me about)/i,
+    /\b(concept|definition|formula|theory|principle|meaning|topic)\b/i,
+  ];
+  return patterns.some(p => p.test(text)) && text.split(' ').length < 20;
+}
+
+async function processUserMessage(text, clarifyContext) {
+  addMessageToUI('user', text);
+  state.messages.push({ role: 'user', content: text });
+
+  let systemAdjust = '';
+  if (clarifyContext) {
+    systemAdjust = `\nThe student is at ${clarifyContext.level} level, studying ${clarifyContext.subject}. They want a ${clarifyContext.need}.`;
+  }
+
+  state.conversationHistory.push({
+    role: 'user',
+    content: text + (systemAdjust ? `\n[Context: ${clarifyContext.level}, ${clarifyContext.subject}, wants ${clarifyContext.need}]` : '')
+  });
+
+  state.msgCount++;
+  updateUsageUI();
+  saveCurrentChat();
+
+  await callAI(clarifyContext);
+}
+
+// ============================================================
+// AI CALL
+// ============================================================
+async function callAI(clarifyContext) {
+  if (!ensureApiKey()) return;
+  showTypingIndicator();
+
+  let systemPrompt = buildSystemPrompt(clarifyContext);
+  let messages = [
+    { role: 'system', content: systemPrompt },
+    ...state.conversationHistory.map(m => {
+      if (Array.isArray(m.content)) return { role: m.role, content: m.content };
+      return { role: m.role, content: m.content };
+    })
+  ];
+
+  try {
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': window.location.href,
+        'X-Title': 'DIVI Mind',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages,
+        max_tokens: 2048,
+        temperature: 0.7,
+      }),
+    });
+
+    removeTypingIndicator();
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error?.message || `API error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const reply = data.choices?.[0]?.message?.content || 'I could not generate a response. Please try again.';
+
+    addMessageToUI('ai', reply);
+    state.messages.push({ role: 'assistant', content: reply });
+    state.conversationHistory.push({ role: 'assistant', content: reply });
+    saveCurrentChat();
+
+  } catch (err) {
+    removeTypingIndicator();
+    showToast('AI Error: ' + err.message, 'error');
+    addMessageToUI('ai', 'Sorry, I encountered an error. Please try again.');
+  }
+}
+
+function buildSystemPrompt(clarifyContext) {
+  let prompt = `You are DIVI Mind, an expert AI academic tutor and exam preparation assistant. You help students learn effectively with clear, structured answers.
+
+Your responses should always include when relevant:
+- **Mark-scheme definition**: The precise definition expected in exams
+- **Formula**: If applicable, the relevant formula(s)
+- **Worked example**: A step-by-step worked example
+- **Examiner tip**: What examiners look for in top-mark answers
+- **Common mistakes**: Errors students typically make
+
+Use markdown formatting for clarity. Be encouraging but academically rigorous.`;
+
+  if (clarifyContext) {
+    prompt += `\n\nThe student is studying at ${clarifyContext.level} level, subject: ${clarifyContext.subject}. They specifically want: ${clarifyContext.need}. Tailor your response appropriately for their level and need.`;
+  }
+
+  if (state.settings.groundedReplies) {
+    prompt += `\n\nIMPORTANT: Only provide information that you are highly confident about. If you're unsure, say so. Stick strictly to established academic content.`;
+  }
+
+  if (state.pdfDoc && Object.keys(state.pdfPageTexts).length > 0) {
+    const currentPageText = state.pdfPageTexts[state.pdfCurrentPage] || '';
+    const allText = Object.values(state.pdfPageTexts).join('\n\n---PAGE BREAK---\n\n');
+    const truncatedText = allText.slice(0, 8000);
+    prompt += `\n\nThe student has uploaded a document: "${state.pdfFileName}" (${state.pdfPageCount} pages). They are currently viewing page ${state.pdfCurrentPage}.
+
+DOCUMENT CONTENT (available pages):
+${truncatedText}
+
+Use this document content as context for your answers when relevant. Reference specific parts of the document when helpful.`;
+  }
+
+  return prompt;
+}
+
+// ============================================================
+// TYPING INDICATOR
+// ============================================================
+function showTypingIndicator() {
+  const area = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  div.className = 'message ai';
+  div.id = 'typing-indicator';
+  div.innerHTML = `
+    <div class="msg-bubble">
+      <div class="typing-indicator">
+        <span></span><span></span><span></span>
+      </div>
+    </div>`;
+  area.appendChild(div);
+  scrollToBottom();
+}
+
+function removeTypingIndicator() {
+  const el = document.getElementById('typing-indicator');
+  if (el) el.remove();
+}
+
+// ============================================================
+// RENDER MESSAGES
+// ============================================================
+function addMessageToUI(role, content) {
+  const area = document.getElementById('chat-area');
+  const div = document.createElement('div');
+  div.className = `message ${role}`;
+
+  const rendered = role === 'ai' ? renderMarkdown(content) : escapeHtml(content);
+  div.innerHTML = `
+    <div class="msg-bubble">${rendered}</div>
+    <div class="msg-time">${formatTime()}</div>`;
+  area.appendChild(div);
+  scrollToBottom();
+}
+
+function renderAllMessages() {
+  const area = document.getElementById('chat-area');
+  area.innerHTML = '';
+  state.messages.forEach(msg => {
+    if (msg.image) {
+      addImageMessage(msg.image);
+    }
+    addMessageToUI(msg.role === 'assistant' ? 'ai' : msg.role, msg.content);
+  });
+}
+
+function scrollToBottom() {
+  const area = document.getElementById('chat-area');
+  requestAnimationFrame(() => {
+    area.scrollTop = area.scrollHeight;
+  });
+}
+
+// ============================================================
+// MARKDOWN RENDERER (simple)
+// ============================================================
+function renderMarkdown(text) {
+  let html = escapeHtml(text);
+
+  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
+  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
+  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
+  html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
+  html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+  html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
+  html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
+  html = html.replace(/\n/g, '<br>');
+  html = html.replace(/<\/(h[1-4]|ul|ol|pre|blockquote|hr)><br>/g, '</$1>');
+  html = html.replace(/<br><(h[1-4]|ul|ol|pre|blockquote)/g, '<$1');
+
+  return html;
+}
+
+function escapeHtml(str) {
+  const el = document.createElement('span');
+  el.textContent = str;
+  return el.innerHTML;
+}
+
+function formatTime() {
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+// ============================================================
+// CLARIFYING QUESTION MODAL
+// ============================================================
+let clarifyStep = 0;
+
+function openClarifyModal() {
+  clarifyStep = 0;
+  state.clarifySelections = {};
+  document.querySelectorAll('.clarify-step').forEach((el, i) => {
+    el.classList.toggle('active', i === 0);
+  });
+  document.querySelectorAll('.clarify-opt').forEach(el => el.classList.remove('selected'));
+  updateClarifyDots();
+  document.getElementById('clarify-modal').classList.add('open');
+}
+
+function closeClarifyModal() {
+  document.getElementById('clarify-modal').classList.remove('open');
+  if (state.pendingUserMessage) {
+    processUserMessage(state.pendingUserMessage);
+    state.pendingUserMessage = '';
+  }
+}
+
+function selectClarify(step, value) {
+  const keys = ['level', 'subject', 'need'];
+  state.clarifySelections[keys[step]] = value;
+
+  const stepEl = document.querySelector(`.clarify-step[data-step="${step}"]`);
+  stepEl.querySelectorAll('.clarify-opt').forEach(el => {
+    el.classList.toggle('selected', el.textContent === value);
+  });
+
+  setTimeout(() => {
+    if (step < 2) {
+      clarifyStep = step + 1;
+      document.querySelectorAll('.clarify-step').forEach((el, i) => {
+        el.classList.toggle('active', i === clarifyStep);
+      });
+      updateClarifyDots();
+    } else {
+      document.getElementById('clarify-modal').classList.remove('open');
+      const msg = state.pendingUserMessage;
+      state.pendingUserMessage = '';
+      processUserMessage(msg, state.clarifySelections);
+    }
+  }, 200);
+}
+
+function updateClarifyDots() {
+  for (let i = 0; i < 3; i++) {
+    const dot = document.getElementById(`cdot-${i}`);
+    dot.className = 'clarify-dot';
+    if (i < clarifyStep) dot.classList.add('done');
+    else if (i === clarifyStep) dot.classList.add('active');
+  }
+}
+
+// ============================================================
+// UPGRADE MODAL
+// ============================================================
+function openUpgradeModal() {
+  document.getElementById('upgrade-modal').classList.add('open');
+}
+
+function closeUpgradeModal() {
+  document.getElementById('upgrade-modal').classList.remove('open');
+}
+
+function upgradePro() {
+  window.open(LEMON_SQUEEZY_URL, '_blank');
+}
+
+// ============================================================
+// QUIZ ENGINE
+// ============================================================
+let quizData = null;
+let quizIndex = 0;
+let quizScore = 0;
+
+function startQuiz() {
+  if (!state.pdfDoc) {
+    showToast('Upload a PDF first to start a quiz', 'warning');
+    return;
+  }
+
+  if (!state.isPro && state.quizUsedForDoc) {
+    openUpgradeModal();
+    return;
+  }
+
+  quizData = null;
+  quizIndex = 0;
+  quizScore = 0;
+  document.getElementById('quiz-body').innerHTML = '<div class="quiz-loading" id="quiz-loading"><div class="typing-indicator" style="justify-content:center"><span></span><span></span><span></span></div><br>Generating exam-style questions...</div>';
+  document.getElementById('quiz-modal').classList.add('open');
+  generateQuiz();
+}
+
+function closeQuizModal() {
+  document.getElementById('quiz-modal').classList.remove('open');
+}
+
+async function generateQuiz() {
+  if (!ensureApiKey()) return;
+  const pageText = state.pdfPageTexts[state.pdfCurrentPage] || Object.values(state.pdfPageTexts)[0] || '';
+  const truncated = pageText.slice(0, 4000);
+
+  const systemPrompt = `You are an exam question generator. Generate exactly 3 multiple choice questions based on the provided text. Format your response as valid JSON array with this exact structure:
+[
+  {
+    "question": "The question text",
+    "options": ["Option A", "Option B", "Option C"],
+    "correct": 0,
+    "explanation": "Brief explanation of the correct answer"
+  }
+]
+Make questions in past paper exam style. Ensure only one correct answer per question. Return ONLY the JSON array, no other text.`;
+
+  try {
+    const res = await fetch(OPENROUTER_URL, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': window.location.href,
+        'X-Title': 'DIVI Mind Quiz',
+      },
+      body: JSON.stringify({
+        model: OPENROUTER_MODEL,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate 3 MCQ questions from this text:\n\n${truncated}` }
+        ],
+        max_tokens: 1500,
+        temperature: 0.5,
+      }),
+    });
+
+    if (!res.ok) throw new Error('Failed to generate quiz');
+
+    const data = await res.json();
+    let content = data.choices?.[0]?.message?.content || '';
+
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('Invalid quiz format');
+
+    quizData = JSON.parse(jsonMatch[0]);
+    if (!Array.isArray(quizData) || quizData.length === 0) throw new Error('No questions generated');
+
+    state.quizUsedForDoc = true;
+    renderQuizQuestion();
+
+  } catch (err) {
+    document.getElementById('quiz-body').innerHTML = `
+      <div style="text-align:center;padding:20px;color:var(--text-dim)">
+        <p>Failed to generate quiz. Please try again.</p>
+        <button onclick="generateQuiz()" style="margin-top:12px;padding:8px 20px;border-radius:8px;background:var(--purple);color:#fff;font-weight:600">Retry</button>
+      </div>`;
+  }
+}
+
+function renderQuizQuestion() {
+  if (!quizData || quizIndex >= quizData.length) {
+    renderQuizScore();
+    return;
+  }
+
+  const q = quizData[quizIndex];
+  const letters = ['A', 'B', 'C'];
+  const dots = quizData.map((_, i) => {
+    let cls = 'quiz-dot';
+    if (i < quizIndex) cls += ' done';
+    else if (i === quizIndex) cls += ' active';
+    return `<div class="${cls}"></div>`;
+  }).join('');
+
+  document.getElementById('quiz-body').innerHTML = `
+    <div class="quiz-dots">${dots}</div>
+    <div class="quiz-question">${escapeHtml(q.question)}</div>
+    ${q.options.map((opt, i) => `
+      <div class="quiz-option" onclick="answerQuiz(${i})" data-idx="${i}">
+        <div class="letter">${letters[i]}</div>
+        <span>${escapeHtml(opt)}</span>
+      </div>`).join('')}
+    <div class="quiz-explanation" id="quiz-explanation">${escapeHtml(q.explanation || '')}</div>
+    <button class="quiz-next" id="quiz-next" onclick="nextQuizQuestion()">Next Question</button>`;
+}
+
+function answerQuiz(idx) {
+  const q = quizData[quizIndex];
+  const options = document.querySelectorAll('.quiz-option');
+  const isCorrect = idx === q.correct;
+
+  if (isCorrect) quizScore++;
+
+  options.forEach((opt, i) => {
+    opt.classList.add('disabled');
+    if (i === q.correct) opt.classList.add('correct');
+    if (i === idx && !isCorrect) opt.classList.add('wrong');
+  });
+
+  document.getElementById('quiz-explanation').classList.add('show');
+  document.getElementById('quiz-next').classList.add('show');
+
+  if (quizIndex >= quizData.length - 1) {
+    document.getElementById('quiz-next').textContent = 'See Results';
+  }
+}
+
+function nextQuizQuestion() {
+  quizIndex++;
+  renderQuizQuestion();
+}
+
+function renderQuizScore() {
+  document.getElementById('quiz-body').innerHTML = `
+    <div class="quiz-score">
+      <div class="score-num">${quizScore}/${quizData.length}</div>
+      <div class="score-label">Questions Correct</div>
+    </div>
+    <button class="quiz-next show" onclick="closeQuizModal()" style="display:block">Done</button>`;
+}
+
+// ============================================================
+// SIGN OUT
+// ============================================================
+function signOut() {
+  if (confirm('Sign out? Your local data will be cleared.')) {
+    localStorage.removeItem('divi-mind-state');
+    location.reload();
+  }
+}
+
+// ============================================================
+// INIT PDF.js worker
+// ============================================================
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+</script>
+
+</body>
+</html>
