@@ -630,7 +630,9 @@ Your responses should always include when relevant:
 - **Examiner tip**: What examiners look for in top-mark answers
 - **Common mistakes**: Errors students typically make
 
-Use markdown formatting for clarity. Be encouraging but academically rigorous.`;
+Use markdown formatting for clarity. Be encouraging but academically rigorous.
+
+IMPORTANT: Never use LaTeX math notation (no \\[ \\], \\( \\), $$ $$, \\text{}, \\frac{}{}, etc). Write all math formulas in plain readable text. For example write: Working Capital = Current Assets - Current Liabilities = $30,000 - $13,000 = $17,000. Use × for multiplication, ÷ for division, and simple text for all expressions.`;
 
   if (clarifyContext) {
     prompt += `\n\nThe student is studying at ${clarifyContext.level} level, subject: ${clarifyContext.subject}. They specifically want: ${clarifyContext.need}. Tailor your response appropriately for their level and need.`;
@@ -714,7 +716,75 @@ function scrollToBottom() {
 // ============================================================
 // MARKDOWN RENDERER (simple)
 // ============================================================
+function cleanLatex(text) {
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => cleanLatexInner(m));
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => cleanLatexInner(m));
+  text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => cleanLatexInner(m));
+  text = text.replace(/\$([^\n$]+?)\$/g, (_, m) => cleanLatexInner(m));
+  return text;
+}
+
+function cleanLatexInner(expr) {
+  let s = expr.trim();
+  s = s.replace(/\\text\{([^}]*)\}/g, '$1');
+  s = s.replace(/\\textbf\{([^}]*)\}/g, '$1');
+  s = s.replace(/\\textit\{([^}]*)\}/g, '$1');
+  s = s.replace(/\\mathrm\{([^}]*)\}/g, '$1');
+  s = s.replace(/\\mathbf\{([^}]*)\}/g, '$1');
+  s = s.replace(/\\frac\{([^}]*)\}\{([^}]*)\}/g, '($1 / $2)');
+  s = s.replace(/\\dfrac\{([^}]*)\}\{([^}]*)\}/g, '($1 / $2)');
+  s = s.replace(/\\sqrt\{([^}]*)\}/g, '√($1)');
+  s = s.replace(/\\times/g, '×');
+  s = s.replace(/\\div/g, '÷');
+  s = s.replace(/\\pm/g, '±');
+  s = s.replace(/\\leq/g, '≤');
+  s = s.replace(/\\geq/g, '≥');
+  s = s.replace(/\\neq/g, '≠');
+  s = s.replace(/\\approx/g, '≈');
+  s = s.replace(/\\infty/g, '∞');
+  s = s.replace(/\\sum/g, '∑');
+  s = s.replace(/\\prod/g, '∏');
+  s = s.replace(/\\int/g, '∫');
+  s = s.replace(/\\pi/g, 'π');
+  s = s.replace(/\\alpha/g, 'α');
+  s = s.replace(/\\beta/g, 'β');
+  s = s.replace(/\\gamma/g, 'γ');
+  s = s.replace(/\\delta/g, 'δ');
+  s = s.replace(/\\theta/g, 'θ');
+  s = s.replace(/\\lambda/g, 'λ');
+  s = s.replace(/\\mu/g, 'μ');
+  s = s.replace(/\\sigma/g, 'σ');
+  s = s.replace(/\\omega/g, 'ω');
+  s = s.replace(/\\Delta/g, 'Δ');
+  s = s.replace(/\\Sigma/g, 'Σ');
+  s = s.replace(/\\Omega/g, 'Ω');
+  s = s.replace(/\\rightarrow/g, '→');
+  s = s.replace(/\\leftarrow/g, '←');
+  s = s.replace(/\\Rightarrow/g, '⇒');
+  s = s.replace(/\\cdot/g, '·');
+  s = s.replace(/\\ldots/g, '…');
+  s = s.replace(/\\dots/g, '…');
+  s = s.replace(/\\quad/g, '  ');
+  s = s.replace(/\\qquad/g, '    ');
+  s = s.replace(/\\,/g, ' ');
+  s = s.replace(/\\;/g, ' ');
+  s = s.replace(/\\!/g, '');
+  s = s.replace(/\\left/g, '');
+  s = s.replace(/\\right/g, '');
+  s = s.replace(/\\big/gi, '');
+  s = s.replace(/\^{([^}]*)}/g, '^($1)');
+  s = s.replace(/_{([^}]*)}/g, '_($1)');
+  s = s.replace(/\^(\w)/g, '^$1');
+  s = s.replace(/_(\w)/g, '_$1');
+  s = s.replace(/[{}]/g, '');
+  s = s.replace(/\\\\/g, '\n');
+  s = s.replace(/\\[a-zA-Z]+/g, '');
+  s = s.replace(/\s{2,}/g, ' ');
+  return s.trim();
+}
+
 function renderMarkdown(text) {
+  text = cleanLatex(text);
   let html = escapeHtml(text);
 
   html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
