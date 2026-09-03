@@ -621,7 +621,7 @@ async function callAI(clarifyContext) {
 }
 
 function buildSystemPrompt(clarifyContext) {
-  let prompt = `You are DIVI Mind, an expert AI academic tutor and exam preparation assistant. You help students learn effectively with clear, structured answers.
+  let prompt = `You are DIVI Mind, an expert AI academic tutor and exam preparation assistant. You help students learn effectively with clear, structured, visually engaging answers.
 
 Your responses should always include when relevant:
 - **Mark-scheme definition**: The precise definition expected in exams
@@ -630,7 +630,23 @@ Your responses should always include when relevant:
 - **Examiner tip**: What examiners look for in top-mark answers
 - **Common mistakes**: Errors students typically make
 
-Use markdown formatting for clarity. Be encouraging but academically rigorous.
+VISUAL & CREATIVE FORMATTING — make every answer attractive and easy to scan:
+- Use **markdown tables** to compare items, show structures, list pros/cons, display data, or break down steps. Example:
+  | Step | Action | Result |
+  |------|--------|--------|
+  | 1 | ... | ... |
+- Use **numbered lists** for sequential steps and **bullet lists** for features/points.
+- Use **bold** for key terms and definitions, *italics* for emphasis or notes.
+- Use headings (###, ####) to break answers into clear sections.
+- Use > blockquotes for examiner tips, important notes, or memory tricks.
+- Use horizontal rules (---) to separate major sections.
+- Add **emoji sparingly** where helpful: use a checkmark for correct points, an X for common mistakes, a lightbulb for tips, a star for key facts, a warning sign for caution, a target for exam focus, a book for definitions, a pencil for examples.
+- When explaining processes or flows, use a clear numbered sequence with arrow symbols between steps.
+- When comparing two or more things, ALWAYS use a table.
+- For definitions, use this format: > **Term**: definition text
+- Keep paragraphs short (2-3 sentences max). Students scan, they don't read walls of text.
+
+Be encouraging, friendly, and academically rigorous. Use a warm, motivating tone.
 
 IMPORTANT: Never use LaTeX math notation (no \\[ \\], \\( \\), $$ $$, \\text{}, \\frac{}{}, etc). Write all math formulas in plain readable text. For example write: Working Capital = Current Assets - Current Liabilities = $30,000 - $13,000 = $17,000. Use × for multiplication, ÷ for division, and simple text for all expressions.`;
 
@@ -785,9 +801,49 @@ function cleanLatexInner(expr) {
 
 function renderMarkdown(text) {
   text = cleanLatex(text);
+
+  const codeBlocks = [];
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+    return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
+  });
+
+  const tables = [];
+  text = text.replace(/(?:^|\n)((?:\|[^\n]+\|\n){2,})/g, (match, tableBlock) => {
+    const rows = tableBlock.trim().split('\n');
+    if (rows.length < 2) return match;
+
+    const isSeparator = (row) => /^\|[\s\-:|]+\|$/.test(row.trim());
+    let headerRow = rows[0];
+    let dataRows;
+    if (rows.length >= 2 && isSeparator(rows[1])) {
+      dataRows = rows.slice(2);
+    } else {
+      dataRows = rows.slice(1);
+      headerRow = null;
+    }
+
+    const parseRow = (row) => row.split('|').slice(1, -1).map(c => c.trim());
+
+    let tableHtml = '<div class="table-wrap"><table>';
+    if (headerRow) {
+      const headers = parseRow(headerRow);
+      tableHtml += '<thead><tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead>';
+    }
+    tableHtml += '<tbody>';
+    dataRows.forEach(row => {
+      if (isSeparator(row)) return;
+      const cells = parseRow(row);
+      tableHtml += '<tr>' + cells.map(c => `<td>${escapeHtml(c)}</td>`).join('') + '</tr>';
+    });
+    tableHtml += '</tbody></table></div>';
+
+    tables.push(tableHtml);
+    return `\n%%TABLE_${tables.length - 1}%%\n`;
+  });
+
   let html = escapeHtml(text);
 
-  html = html.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
@@ -803,6 +859,13 @@ function renderMarkdown(text) {
   html = html.replace(/\n/g, '<br>');
   html = html.replace(/<\/(h[1-4]|ul|ol|pre|blockquote|hr)><br>/g, '</$1>');
   html = html.replace(/<br><(h[1-4]|ul|ol|pre|blockquote)/g, '<$1');
+
+  codeBlocks.forEach((block, i) => {
+    html = html.replace(`%%CODEBLOCK_${i}%%`, block);
+  });
+  tables.forEach((table, i) => {
+    html = html.replace(`%%TABLE_${i}%%`, table);
+  });
 
   return html;
 }

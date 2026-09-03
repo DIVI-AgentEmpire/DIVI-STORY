@@ -228,7 +228,15 @@ overflow-x:auto;margin:8px 0;font-size:12px;
 .msg-bubble h1,.msg-bubble h2,.msg-bubble h3,.msg-bubble h4{font-family:var(--font-heading);margin:10px 0 6px}
 .msg-bubble h3{font-size:15px}
 .msg-bubble h4{font-size:14px;color:var(--teal)}
-.msg-bubble blockquote{border-left:3px solid var(--purple);padding-left:10px;color:var(--text-dim);margin:8px 0}
+.msg-bubble blockquote{border-left:3px solid var(--purple);padding-left:12px;color:var(--text-dim);margin:8px 0;background:rgba(124,58,237,0.06);padding:8px 12px;border-radius:0 8px 8px 0;font-style:italic}
+.msg-bubble .table-wrap{overflow-x:auto;margin:10px 0;border-radius:10px;border:1px solid var(--border)}
+.msg-bubble table{width:100%;border-collapse:collapse;font-size:13px}
+.msg-bubble thead{background:rgba(124,58,237,0.12)}
+.msg-bubble th{padding:8px 12px;text-align:left;font-weight:600;font-family:var(--font-heading);color:var(--purple);border-bottom:2px solid var(--border);white-space:nowrap}
+.msg-bubble td{padding:7px 12px;border-bottom:1px solid var(--border)}
+.msg-bubble tbody tr:last-child td{border-bottom:none}
+.msg-bubble tbody tr:hover{background:rgba(0,200,150,0.06)}
+.msg-bubble hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .msg-time{font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)}
 .message.user .msg-time{text-align:right}
 
