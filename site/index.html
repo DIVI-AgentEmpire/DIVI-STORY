@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>DIVI Mind — AI Study Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+</head>
+<body>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Overlay for sidebar -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+<div class="sidebar-header">
+<h2>DIVI Mind</h2>
+<button class="sidebar-close" onclick="closeSidebar()">&#10005;</button>
+</div>
+
+<div class="sidebar-section">
+<div class="sidebar-section-title">Account</div>
+<div class="account-card">
+<div class="avatar" id="avatar-initials">S</div>
+<div class="account-info">
+<div class="account-name" id="account-name">Student</div>
+<div class="account-email" id="account-email">student@divi.ai</div>
+<span class="plan-badge" id="plan-badge">FREE</span>
+</div>
+</div>
+</div>
+
+<div class="sidebar-section progress-section">
+<div class="sidebar-section-title">Usage</div>
+<div class="progress-label">
+<span>Messages</span>
+<span id="msg-count">0 / 15</span>
+</div>
+<div class="progress-bar">
+<div class="progress-fill" id="msg-progress" style="width:0%"></div>
+</div>
+</div>
+
+<div class="sidebar-section">
+<div class="sidebar-section-title">Recent Chats</div>
+<div id="recent-chats-list">
+<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No conversations yet</div>
+</div>
+</div>
+
+<div class="sidebar-section">
+<div class="sidebar-section-title">Preferences</div>
+<div class="toggle-row">
+<span class="toggle-label">Auto Quiz on Upload</span>
+<div class="toggle" id="toggle-autoquiz" onclick="toggleSetting('autoQuiz',this)"></div>
+</div>
+<div class="toggle-row">
+<span class="toggle-label">Save Chat History</span>
+<div class="toggle on" id="toggle-savehistory" onclick="toggleSetting('saveHistory',this)"></div>
+</div>
+<div class="toggle-row">
+<span class="toggle-label">Grounded Replies</span>
+<div class="toggle" id="toggle-grounded" onclick="toggleSetting('groundedReplies',this)"></div>
+</div>
+<div class="toggle-row">
+<span class="toggle-label">Notifications</span>
+<div class="toggle on" id="toggle-notif" onclick="toggleSetting('notifications',this)"></div>
+</div>
+</div>
+
+<div class="sidebar-section" style="padding-top:0">
+<div class="pro-card">
+<h3>DIVI Pro</h3>
+<p>Unlimited PDFs, chat, quizzes, and image uploads</p>
+<button onclick="openUpgradeModal()">Explore Pro &#183; $6.99/mo</button>
+</div>
+</div>
+
+<div class="sidebar-signout" style="display:flex;flex-direction:column;gap:0.5rem;">
+<button onclick="document.getElementById('apikey-modal').classList.add('open');closeSidebar();" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple);">Change API Key</button>
+<button onclick="signOut()">Sign Out</button>
+</div>
+</div>
+
+<!-- Topbar -->
+<div class="topbar">
+<div class="topbar-logo" onclick="openSidebar()">
+<svg viewBox="0 0 28 28" fill="none">
+<rect width="28" height="28" rx="8" fill="url(#lg)"/>
+<defs><linearGradient id="lg" x1="0" y1="0" x2="28" y2="28"><stop stop-color="#7C3AED"/><stop offset="1" stop-color="#00C896"/></linearGradient></defs>
+<text x="14" y="19" text-anchor="middle" fill="#fff" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="13">D</text>
+</svg>
+<span>DIVI Mind</span>
+</div>
+<div class="topbar-center">
+<span class="usage-badge" id="usage-badge">0 / 15 msgs</span>
+</div>
+<div class="topbar-right">
+<button class="btn-quiz" id="btn-quiz" onclick="startQuiz()">Quiz Me</button>
+<button class="btn-upgrade" onclick="openUpgradeModal()">Pro</button>
+</div>
+</div>
+
+<!-- Chat area -->
+<div class="chat-area" id="chat-area">
+<div class="empty-state" id="empty-state">
+<div class="empty-logo">
+<svg width="56" height="56" viewBox="0 0 56 56" fill="none">
+<rect width="56" height="56" rx="16" fill="url(#lg2)"/>
+<defs><linearGradient id="lg2" x1="0" y1="0" x2="56" y2="56"><stop stop-color="#7C3AED"/><stop offset="1" stop-color="#00C896"/></linearGradient></defs>
+<text x="28" y="36" text-anchor="middle" fill="#fff" font-family="Space Grotesk,sans-serif" font-weight="700" font-size="22">D</text>
+</svg>
+</div>
+<div class="empty-tagline">AI &#183; LEARN &#183; GROW</div>
+<div class="empty-title">What shall we study?</div>
+<div class="empty-sub">Upload a document, ask a question, or pick a topic to get started.</div>
+<div class="chip-grid" id="chip-grid">
+<button class="chip" onclick="useChip('Upload a PDF to study')">Upload a PDF to study</button>
+<button class="chip" onclick="useChip('Explain a concept')">Explain a concept</button>
+<button class="chip" onclick="useChip('Quiz me on a topic')">Quiz me on a topic</button>
+<button class="chip" onclick="useChip('Summarize my notes')">Summarize my notes</button>
+</div>
+</div>
+</div>
+
+<!-- Input bar -->
+<div class="input-bar">
+<div class="attach-btn" id="attach-btn">
+<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.49"/>
+</svg>
+<div class="attach-popover" id="attach-popover">
+<button class="attach-option" onclick="triggerPdfUpload()">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+PDF Document
+</button>
+<button class="attach-option" id="img-attach-option" onclick="triggerImageUpload()">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+Image
+</button>
+</div>
+</div>
+<div class="input-wrap">
+<textarea id="msg-input" placeholder="Ask DIVI anything..." rows="1" onkeydown="handleInputKey(event)" oninput="autoResize(this)"></textarea>
+<button class="send-btn" id="send-btn" onclick="sendMessage()" disabled>
+<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+</svg>
+</button>
+</div>
+</div>
+
+<!-- Hidden file inputs -->
+<input type="file" id="pdf-input" accept=".pdf" style="display:none" onchange="handlePdfUpload(event)">
+<input type="file" id="img-input" accept="image/*" style="display:none" onchange="handleImageUpload(event)">
+
+<!-- PDF Viewer -->
+<div class="pdf-viewer" id="pdf-viewer">
+<div class="pdf-viewer-header">
+<button onclick="closePdfViewer()" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--text);font-size:16px">&#10005;</button>
+<span class="pdf-title" id="pdf-viewer-title">Document</span>
+<div class="pdf-nav">
+<button onclick="pdfPrevPage()">&#8592;</button>
+<span id="pdf-page-info">1 / 1</span>
+<button onclick="pdfNextPage()">&#8594;</button>
+</div>
+</div>
+<div class="pdf-canvas-wrap">
+<canvas id="pdf-canvas"></canvas>
+</div>
+</div>
+
+<!-- Image fullscreen -->
+<div class="img-fullscreen" id="img-fullscreen" onclick="this.classList.remove('open')">
+<img id="img-fullscreen-src" src="" alt="">
+</div>
+
+<!-- Clarifying question modal -->
+<div class="modal-overlay" id="clarify-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Help me help you</h3>
+<button class="modal-close" onclick="closeClarifyModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+<div class="clarify-step active" data-step="0">
+<div class="clarify-q">What level are you studying?</div>
+<div class="clarify-options">
+<button class="clarify-opt" onclick="selectClarify(0,'O-Level')">O-Level</button>
+<button class="clarify-opt" onclick="selectClarify(0,'A-Level')">A-Level</button>
+<button class="clarify-opt" onclick="selectClarify(0,'University')">University</button>
+<button class="clarify-opt" onclick="selectClarify(0,'Other')">Other</button>
+</div>
+</div>
+<div class="clarify-step" data-step="1">
+<div class="clarify-q">What subject?</div>
+<div class="clarify-options">
+<button class="clarify-opt" onclick="selectClarify(1,'Accounts')">Accounts</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Economics')">Economics</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Biology')">Biology</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Math')">Math</button>
+<button class="clarify-opt" onclick="selectClarify(1,'Other')">Other</button>
+</div>
+</div>
+<div class="clarify-step" data-step="2">
+<div class="clarify-q">What do you need?</div>
+<div class="clarify-options">
+<button class="clarify-opt" onclick="selectClarify(2,'Definition')">Definition</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Full Explanation')">Full Explanation</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Formula')">Formula</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Exam Technique')">Exam Technique</button>
+<button class="clarify-opt" onclick="selectClarify(2,'Example')">Example</button>
+</div>
+</div>
+<div class="clarify-progress">
+<div class="clarify-dot active" id="cdot-0"></div>
+<div class="clarify-dot" id="cdot-1"></div>
+<div class="clarify-dot" id="cdot-2"></div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Upgrade modal -->
+<div class="modal-overlay" id="upgrade-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Upgrade to DIVI Pro</h3>
+<button class="modal-close" onclick="closeUpgradeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+<div class="upgrade-price">
+<div class="amount">$6.99</div>
+<div class="period">per month</div>
+</div>
+<ul class="upgrade-features">
+<li>Unlimited PDF uploads</li>
+<li>Unlimited AI chat messages</li>
+<li>All pages in documents</li>
+<li>Unlimited quizzes</li>
+<li>Image upload &amp; analysis</li>
+<li>Full chat history</li>
+</ul>
+<button class="btn-pro" onclick="upgradePro()">Get DIVI Pro</button>
+<button class="btn-later" onclick="closeUpgradeModal()">Maybe later</button>
+</div>
+</div>
+</div>
+
+<!-- Quiz modal -->
+<div class="modal-overlay" id="quiz-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Quick Quiz</h3>
+<button class="modal-close" onclick="closeQuizModal()">&#10005;</button>
+</div>
+<div class="modal-body" id="quiz-body">
+<div class="quiz-loading" id="quiz-loading">Generating questions...</div>
+</div>
+</div>
+</div>
+
+<!-- API Key modal -->
+<div class="modal-overlay" id="apikey-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Enter API Key</h3>
+</div>
+<div class="modal-body">
+<p style="color:var(--text-dim);font-size:0.9rem;margin-bottom:1rem;">Enter your OpenRouter API key to start using DIVI Mind. Get one free at <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--purple)">openrouter.ai/keys</a></p>
+<input type="password" id="apikey-input" placeholder="sk-or-v1-..." style="width:100%;padding:0.75rem 1rem;border-radius:12px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:0.95rem;font-family:'Inter',sans-serif;box-sizing:border-box;margin-bottom:1rem;">
+<button class="btn-pro" onclick="saveApiKey()" style="width:100%;">Save &amp; Continue</button>
+</div>
+</div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
