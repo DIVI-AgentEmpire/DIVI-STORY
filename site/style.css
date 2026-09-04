@@ -453,6 +453,50 @@ display:none;align-items:center;justify-content:center;padding:20px;cursor:point
 .img-fullscreen.open{display:flex}
 .img-fullscreen img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px}
 
+/* Welcome Screen */
+.welcome-screen{
+position:fixed;inset:0;background:var(--bg);z-index:1000;
+display:flex;align-items:center;justify-content:center;
+opacity:0;visibility:hidden;transition:opacity .4s ease,visibility .4s ease;
+}
+.welcome-screen.active{opacity:1;visibility:visible}
+.welcome-content{
+text-align:center;padding:32px 24px;max-width:380px;width:100%;
+}
+.welcome-logo{margin-bottom:24px}
+.welcome-logo svg{width:72px;height:72px}
+.welcome-title{
+font-family:var(--font-heading);font-size:32px;font-weight:700;
+margin-bottom:6px;
+background:linear-gradient(135deg,var(--purple),var(--teal));
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;
+background-clip:text;
+}
+.welcome-tagline{
+font-family:var(--font-mono);font-size:11px;color:var(--purple);
+letter-spacing:3px;text-transform:uppercase;margin-bottom:16px;
+}
+.welcome-desc{
+font-size:14px;color:var(--text-dim);line-height:1.6;margin-bottom:36px;
+}
+.welcome-buttons{display:flex;flex-direction:column;gap:12px;margin-bottom:20px}
+.welcome-btn{
+width:100%;padding:14px 20px;border-radius:var(--radius);
+font-size:15px;font-weight:600;display:flex;align-items:center;
+justify-content:center;gap:10px;transition:.2s;cursor:pointer;
+}
+.google-btn{
+background:#fff;color:#333;border:1px solid #ddd;
+}
+.google-btn:hover{background:#f5f5f5;border-color:#bbb}
+.guest-btn{
+background:var(--surface);color:var(--text-dim);border:1px solid var(--border);
+}
+.guest-btn:hover{border-color:var(--purple);color:var(--text);background:rgba(124,58,237,.08)}
+.welcome-note{
+font-size:12px;color:var(--text-muted);
+}
+
 /* Responsive */
 @media(min-width:600px){
 .message{max-width:70%}
