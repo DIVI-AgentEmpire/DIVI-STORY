@@ -200,6 +200,7 @@ transition:.2s;
 .message{
 max-width:85%;margin-bottom:16px;animation:msgIn .25s ease;
 }
+.message.ai{max-width:100%;width:100%}
 .message.user{align-self:flex-end}
 .message.ai{align-self:flex-start}
 @keyframes msgIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -236,6 +237,7 @@ overflow-x:auto;margin:8px 0;font-size:12px;
 .msg-bubble td{padding:7px 12px;border-bottom:1px solid var(--border)}
 .msg-bubble tbody tr:last-child td{border-bottom:none}
 .msg-bubble tbody tr:hover{background:rgba(0,200,150,0.06)}
+.msg-bubble .concept-img{max-width:100%;border-radius:var(--radius);margin:10px 0;border:1px solid var(--border)}
 .msg-bubble hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .msg-time{font-size:10px;color:var(--text-muted);margin-top:4px;font-family:var(--font-mono)}
 .message.user .msg-time{text-align:right}
@@ -454,6 +456,7 @@ display:none;align-items:center;justify-content:center;padding:20px;cursor:point
 /* Responsive */
 @media(min-width:600px){
 .message{max-width:70%}
+.message.ai{max-width:100%;width:100%}
 .chip-grid{gap:10px}
 }
 @media(min-width:768px){

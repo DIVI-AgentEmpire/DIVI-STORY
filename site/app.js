@@ -537,11 +537,10 @@ function sendMessage() {
 }
 
 function isBroadConceptual(text) {
-  const patterns = [
-    /^(what|explain|define|describe|how|why|tell me about)/i,
-    /\b(concept|definition|formula|theory|principle|meaning|topic)\b/i,
-  ];
-  return patterns.some(p => p.test(text)) && text.split(' ').length < 20;
+  const words = text.split(' ').length;
+  if (words > 6 || words < 2) return false;
+  const vague = /^(explain|define|describe|tell me about)\s+(a\s+)?\w+$/i;
+  return vague.test(text.trim());
 }
 
 async function processUserMessage(text, clarifyContext) {
@@ -627,7 +626,7 @@ RESPONSE STYLE — Visual-first, minimal text:
 - MAXIMUM 1-2 short sentences of explanation per section. Never write paragraphs.
 - Replace explanations with TABLES, DIAGRAMS, FLOWCHARTS, and VISUAL STRUCTURES.
 - Every answer MUST contain at least one table or visual diagram.
-- Use emoji as visual markers extensively: 📌 key point, ✅ correct, ❌ wrong, 💡 tip, ⚠️ caution, 🎯 exam focus, 📖 definition, ✏️ example, ⭐ important, 🔑 key term, 📊 data, 🔄 process, ➡️ leads to, 🏆 best practice.
+- Use emoji as visual markers extensively: \u{1F4CC} key point, ✅ correct, ❌ wrong, \u{1F4A1} tip, ⚠️ caution, \u{1F3AF} exam focus, \u{1F4D6} definition, ✏️ example, ⭐ important, \u{1F511} key term, \u{1F4CA} data, \u{1F504} process, ➡️ leads to, \u{1F3C6} best practice.
 
 VISUAL FORMATS to use (pick the best fit):
 
@@ -645,12 +644,12 @@ VISUAL FORMATS to use (pick the best fit):
    | ... | ✅ | ❌ |
 
 4. **FORMULA BOXES** — wrap formulas in blockquotes:
-   > 🔑 **Formula**: Revenue - Expenses = Profit
+   > \u{1F511} **Formula**: Revenue - Expenses = Profit
 
 5. **VISUAL LISTS with emoji** — instead of plain bullets:
    - ✅ Do this
    - ❌ Not this
-   - 💡 Remember this
+   - \u{1F4A1} Remember this
 
 6. **TREE/HIERARCHY structures**:
    **Main Topic**
@@ -668,13 +667,13 @@ VISUAL FORMATS to use (pick the best fit):
    > ⭐ **Key Takeaway**: One line summary
 
 9. **EXAM TIP BOXES**:
-   > 🎯 **Examiner wants**: specific marking point
+   > \u{1F3AF} **Examiner wants**: specific marking point
 
 STRUCTURE every answer like this:
-- 📖 **One-line definition** (if applicable)
-- 📊 **Visual breakdown** (table/diagram/flowchart — this is the MAIN part, make it big)
+- \u{1F4D6} **One-line definition** (if applicable)
+- \u{1F4CA} **Visual breakdown** (table/diagram/flowchart — this is the MAIN part, make it big)
 - ✏️ **Worked example** in a table or step-by-step visual
-- 🎯 **Exam tip** in a blockquote
+- \u{1F3AF} **Exam tip** in a blockquote
 - ❌ **Common mistakes** as a short visual list
 
 CRITICAL RULES:
@@ -687,6 +686,17 @@ CRITICAL RULES:
 - For processes, ALWAYS use arrow flowcharts or numbered steps.
 - Make the visual diagram/table the LARGEST part of your answer.
 - Be warm and encouraging but BRIEF. One emoji phrase beats one paragraph.
+
+IMAGES — Use online images to visually explain concepts:
+- Include 1-2 relevant images per answer using markdown: ![description](url)
+- Use images from Wikipedia/Wikimedia Commons (upload.wikimedia.org), or other direct image URLs
+- For science: diagrams, cell structures, circuits, anatomy, chemical structures
+- For math: geometric shapes, graphs, coordinate planes
+- For economics/business: charts, supply-demand curves, market diagrams
+- For geography/history: maps, historical images, landmarks
+- Example: ![Supply and Demand Curve](https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Supply-and-demand.svg/400px-Supply-and-demand.svg.png)
+- Only use DIRECT image URLs (ending in .png, .jpg, .svg, .gif or from upload.wikimedia.org)
+- Place images right after the relevant section heading for maximum visual impact
 
 IMPORTANT: Never use LaTeX math notation (no \\\\[ \\\\], \\\\( \\\\), $$ $$, \\\\text{}, \\\\frac{}{}, etc). Write all math in plain text. Example: Working Capital = Current Assets - Current Liabilities. Use × for multiplication, ÷ for division.`;
 
@@ -884,6 +894,7 @@ function renderMarkdown(text) {
 
   let html = escapeHtml(text);
 
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img class="concept-img" src="$2" alt="$1" onerror="this.style.display=\'none\'">');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
