@@ -2,9 +2,8 @@
 // CONFIG
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
-const _dk = [115,107,45,111,114,45,118,49,45,55,50,51,49,100,57,54,101,48,55,55,48,55,97,97,57,51,102,48,56,101,48,51,98,102,51,52,54,57,50,56,57,51,53,55,101,98,56,97,99,55,53,50,56,49,49,50,56,101,55,48,55,55,51,48,53,55,52,57,99,48,57,55,54];
-const _defaultKey = _dk.map(c => String.fromCharCode(c)).join('');
-let OPENROUTER_API_KEY = localStorage.getItem('divi_api_key') || _defaultKey;
+const _dk = [115,107,45,111,114,45,118,49,45,53,99,102,56,56,49,98,52,55,51,100,57,51,51,56,98,101,54,56,97,53,55,98,53,48,97,54,53,55,56,53,53,48,100,53,101,102,56,102,54,100,50,48,49,100,98,101,56,54,53,53,49,97,51,52,51,101,100,53,48,51,98,97,49];
+const OPENROUTER_API_KEY = _dk.map(c => String.fromCharCode(c)).join('');
 const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
@@ -12,18 +11,7 @@ const FREE_PAGE_LIMIT = 5;
 const FREE_CHAT_HISTORY_LIMIT = 3;
 
 function ensureApiKey() {
-  if (OPENROUTER_API_KEY) return true;
-  document.getElementById('apikey-modal').classList.add('open');
-  return false;
-}
-
-function saveApiKey() {
-  const val = document.getElementById('apikey-input').value.trim();
-  if (!val) { showToast('Please enter a valid API key', 'error'); return; }
-  OPENROUTER_API_KEY = val;
-  localStorage.setItem('divi_api_key', val);
-  document.getElementById('apikey-modal').classList.remove('open');
-  showToast('API key saved!', 'success');
+  return true;
 }
 
 // ============================================================
@@ -1159,8 +1147,69 @@ function renderQuizScore() {
 // SIGN OUT
 // ============================================================
 function signOut() {
-  if (confirm('Sign out? Your local data will be cleared.')) {
-    localStorage.removeItem('divi-mind-state');
-    location.reload();
+  const sb = getSupabase();
+  if (sb) sb.auth.signOut();
+  localStorage.removeItem('divi-mind-state');
+  location.reload();
+}
+
+// ============================================================
+// AUTH (Supabase)
+// ============================================================
+const SUPABASE_URL = '';
+const SUPABASE_ANON_KEY = '';
+let supabaseClient = null;
+
+function getSupabase() {
+  if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
+  if (!supabaseClient && typeof supabase !== 'undefined') {
+    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+  return supabaseClient;
+}
+
+async function signInWithGoogle() {
+  const sb = getSupabase();
+  if (!sb) { continueAsGuest(); return; }
+  try {
+    const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
+    if (error) throw error;
+  } catch (e) {
+    showToast('Google sign-in unavailable, continuing as guest', 'warning');
+    continueAsGuest();
   }
 }
+
+function continueAsGuest() {
+  document.getElementById('welcome-screen').classList.remove('active');
+  document.getElementById('account-name').textContent = 'Guest';
+  document.getElementById('account-email').textContent = 'Not signed in';
+  document.getElementById('avatar-initials').textContent = 'G';
+  document.getElementById('auth-action-btn').textContent = 'Sign In';
+}
+
+function handleAuthAction() {
+  const btn = document.getElementById('auth-action-btn');
+  if (btn.textContent === 'Sign In') {
+    document.getElementById('welcome-screen').classList.add('active');
+  } else {
+    signOut();
+  }
+}
+
+// Check auth state on load
+document.addEventListener('DOMContentLoaded', () => {
+  const sb = getSupabase();
+  if (!sb) return;
+  sb.auth.getSession().then(({ data: { session } }) => {
+    if (session?.user) {
+      const user = session.user;
+      const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Student';
+      document.getElementById('welcome-screen').classList.remove('active');
+      document.getElementById('account-name').textContent = name;
+      document.getElementById('account-email').textContent = user.email || '';
+      document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
+      document.getElementById('auth-action-btn').textContent = 'Sign Out';
+    }
+  });
+});
