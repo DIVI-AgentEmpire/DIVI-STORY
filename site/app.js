@@ -1,7 +1,7 @@
 // ============================================================
 // CONFIG
 // ============================================================
-const LEMON_SQUEEZY_URL = '#';
+const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
 const _dk = [115,107,45,111,114,45,118,49,45,55,50,51,49,100,57,54,101,48,55,55,48,55,97,97,57,51,102,48,56,101,48,51,98,102,51,52,54,57,50,56,57,51,53,55,101,98,56,97,99,55,53,50,56,49,49,50,56,101,55,48,55,55,51,48,53,55,52,57,99,48,57,55,54];
 const _defaultKey = _dk.map(c => String.fromCharCode(c)).join('');
 let OPENROUTER_API_KEY = localStorage.getItem('divi_api_key') || _defaultKey;
@@ -783,7 +783,7 @@ function scrollToBottom() {
 // MARKDOWN RENDERER (simple)
 // ============================================================
 function cleanLatex(text) {
-  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => cleanLatexInner(m));
+  text = text.replace(/\\\[(\s\S]*?)\\\]/g, (_, m) => cleanLatexInner(m));
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => cleanLatexInner(m));
   text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => cleanLatexInner(m));
   text = text.replace(/\$([^\n$]+?)\$/g, (_, m) => cleanLatexInner(m));
