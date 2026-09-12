@@ -346,7 +346,7 @@ async function handlePdfUpload(e) {
       setTimeout(() => startQuiz(), 500);
     }
 
-    const contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages. Please acknowledge the document and let me know you're ready to help me study it.`;
+    const contextMsg = `I've uploaded a PDF document called \"${file.name}\" with ${pdf.numPages} pages. Please acknowledge the document and let me know you're ready to help me study it.`;
     addMessageToUI('user', contextMsg);
     state.messages.push({ role: 'user', content: contextMsg });
     state.conversationHistory.push({ role: 'user', content: contextMsg });
@@ -527,7 +527,7 @@ function sendMessage() {
 function isBroadConceptual(text) {
   const words = text.split(' ').length;
   if (words > 6 || words < 2) return false;
-  const vague = /^(explain|define|describe|tell me about)\s+(a\s+)?\w+$/i;
+  const vague = /^(explain|define|describe|tell me about)\\s+(a\\s+)?\\w+$/i;
   return vague.test(text.trim());
 }
 
@@ -771,7 +771,7 @@ function scrollToBottom() {
 // MARKDOWN RENDERER (simple)
 // ============================================================
 function cleanLatex(text) {
-  text = text.replace(/\\\[(\s\S]*?)\\\]/g, (_, m) => cleanLatexInner(m));
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, m) => cleanLatexInner(m));
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, m) => cleanLatexInner(m));
   text = text.replace(/\$\$([\s\S]*?)\$\$/g, (_, m) => cleanLatexInner(m));
   text = text.replace(/\$([^\n$]+?)\$/g, (_, m) => cleanLatexInner(m));
@@ -1154,7 +1154,7 @@ function signOut() {
 }
 
 // ============================================================
-// AUTH (Supabase)
+// AUTH (DIVI Account — Supabase)
 // ============================================================
 const SUPABASE_URL = '';
 const SUPABASE_ANON_KEY = '';
@@ -1168,16 +1168,150 @@ function getSupabase() {
   return supabaseClient;
 }
 
-async function signInWithGoogle() {
-  const sb = getSupabase();
-  if (!sb) { continueAsGuest(); return; }
-  try {
-    const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin } });
-    if (error) throw error;
-  } catch (e) {
-    showToast('Google sign-in unavailable, continuing as guest', 'warning');
-    continueAsGuest();
+function openSignUpForm() {
+  document.getElementById('signup-modal').classList.add('open');
+}
+function closeSignUpForm() {
+  document.getElementById('signup-modal').classList.remove('open');
+}
+function openSignInForm() {
+  document.getElementById('signin-modal').classList.add('open');
+}
+function closeSignInForm() {
+  document.getElementById('signin-modal').classList.remove('open');
+}
+function openForgotPassword() {
+  document.getElementById('forgot-modal').classList.add('open');
+}
+function closeForgotPassword() {
+  document.getElementById('forgot-modal').classList.remove('open');
+}
+
+async function handleSignUp(e) {
+  e.preventDefault();
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm').value;
+
+  if (password !== confirm) {
+    showToast('Passwords do not match', 'error');
+    return;
   }
+  if (password.length < 8) {
+    showToast('Password must be at least 8 characters', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('signup-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Creating account...';
+
+  const sb = getSupabase();
+  if (!sb) {
+    showToast('Account system is being set up. Continuing as guest.', 'warning');
+    btn.disabled = false;
+    btn.textContent = 'Create Account';
+    closeSignUpForm();
+    continueAsGuest();
+    return;
+  }
+
+  try {
+    const { data, error } = await sb.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } }
+    });
+    if (error) throw error;
+
+    if (data.user && !data.session) {
+      showToast('Check your email to confirm your DIVI Account', 'success');
+      closeSignUpForm();
+    } else if (data.session) {
+      showToast('Welcome to DIVI Mind!', 'success');
+      closeSignUpForm();
+      setAuthUI(data.user);
+    }
+  } catch (err) {
+    showToast(err.message || 'Sign up failed', 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Create Account';
+}
+
+async function handleSignIn(e) {
+  e.preventDefault();
+  const email = document.getElementById('signin-email').value.trim();
+  const password = document.getElementById('signin-password').value;
+
+  const btn = document.getElementById('signin-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Signing in...';
+
+  const sb = getSupabase();
+  if (!sb) {
+    showToast('Account system is being set up. Continuing as guest.', 'warning');
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+    closeSignInForm();
+    continueAsGuest();
+    return;
+  }
+
+  try {
+    const { data, error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    showToast('Welcome back!', 'success');
+    closeSignInForm();
+    setAuthUI(data.user);
+  } catch (err) {
+    showToast(err.message || 'Sign in failed', 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Sign In';
+}
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const email = document.getElementById('forgot-email').value.trim();
+
+  const btn = document.getElementById('forgot-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+
+  const sb = getSupabase();
+  if (!sb) {
+    showToast('Account system is being set up', 'warning');
+    btn.disabled = false;
+    btn.textContent = 'Send Reset Link';
+    return;
+  }
+
+  try {
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (error) throw error;
+    showToast('Password reset link sent to your email', 'success');
+    closeForgotPassword();
+  } catch (err) {
+    showToast(err.message || 'Failed to send reset link', 'error');
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Send Reset Link';
+}
+
+function setAuthUI(user) {
+  const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Student';
+  document.getElementById('welcome-screen').classList.remove('active');
+  document.getElementById('account-name').textContent = name;
+  document.getElementById('account-email').textContent = user.email || '';
+  document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('auth-action-btn').textContent = 'Sign Out';
 }
 
 function continueAsGuest() {
@@ -1191,25 +1325,18 @@ function continueAsGuest() {
 function handleAuthAction() {
   const btn = document.getElementById('auth-action-btn');
   if (btn.textContent === 'Sign In') {
-    document.getElementById('welcome-screen').classList.add('active');
+    openSignInForm();
   } else {
     signOut();
   }
 }
 
-// Check auth state on load
 document.addEventListener('DOMContentLoaded', () => {
   const sb = getSupabase();
   if (!sb) return;
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session?.user) {
-      const user = session.user;
-      const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Student';
-      document.getElementById('welcome-screen').classList.remove('active');
-      document.getElementById('account-name').textContent = name;
-      document.getElementById('account-email').textContent = user.email || '';
-      document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
-      document.getElementById('auth-action-btn').textContent = 'Sign Out';
+      setAuthUI(session.user);
     }
   });
 });
