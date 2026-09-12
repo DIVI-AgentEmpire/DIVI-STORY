@@ -30,6 +30,8 @@ let state = {
   quizUsedForDoc: false,
   isPro: false,
   currentChatId: null,
+  currentUserId: null,
+  isGuest: true,
   settings: {
     autoQuiz: false,
     saveHistory: true,
@@ -58,9 +60,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
+function getStorageKey() {
+  if (state.currentUserId) return 'divi-mind-' + state.currentUserId;
+  return 'divi-mind-state';
+}
+
 function loadState() {
   try {
-    const saved = localStorage.getItem('divi-mind-state');
+    const saved = localStorage.getItem(getStorageKey());
     if (saved) {
       const parsed = JSON.parse(saved);
       state.chatHistory = parsed.chatHistory || [];
@@ -73,8 +80,9 @@ function loadState() {
 function saveState() {
   try {
     if (!state.settings.saveHistory) return;
-    localStorage.setItem('divi-mind-state', JSON.stringify({
-      chatHistory: state.chatHistory.slice(0, FREE_CHAT_HISTORY_LIMIT),
+    const limit = state.isPro ? state.chatHistory.length : (state.isGuest ? FREE_CHAT_HISTORY_LIMIT : 10);
+    localStorage.setItem(getStorageKey(), JSON.stringify({
+      chatHistory: state.chatHistory.slice(0, limit),
       settings: state.settings,
       isPro: state.isPro,
     }));
@@ -125,7 +133,18 @@ function restoreSettings() {
 // USAGE UI
 // ============================================================
 function updateUsageUI() {
-  const count = state.msgCount;
+  if (state.isPro) {
+    document.getElementById('usage-badge').textContent = 'Pro';
+    document.getElementById('msg-count').textContent = 'Unlimited';
+    document.getElementById('msg-progress').style.width = '0%';
+    return;
+  }
+  let count;
+  if (state.isGuest) {
+    count = parseInt(localStorage.getItem('divi-guest-msgs') || '0');
+  } else {
+    count = state.msgCount;
+  }
   document.getElementById('usage-badge').textContent = `${count} / ${FREE_MSG_LIMIT} msgs`;
   document.getElementById('msg-count').textContent = `${count} / ${FREE_MSG_LIMIT}`;
   const pct = Math.min((count / FREE_MSG_LIMIT) * 100, 100);
@@ -141,7 +160,7 @@ function renderRecentChats() {
     list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:8px 0">No conversations yet</div>';
     return;
   }
-  const limit = state.isPro ? state.chatHistory.length : FREE_CHAT_HISTORY_LIMIT;
+  const limit = state.isPro ? state.chatHistory.length : (state.isGuest ? FREE_CHAT_HISTORY_LIMIT : 10);
   list.innerHTML = state.chatHistory.slice(0, limit).map(chat =>
     `<div class="chat-item" onclick="loadChat('${chat.id}')">
       <div class="chat-item-title">${escapeHtml(chat.title)}</div>
@@ -504,7 +523,14 @@ function sendMessage() {
   if (!text) return;
   if (!ensureApiKey()) return;
 
-  if (!state.isPro && state.msgCount >= FREE_MSG_LIMIT) {
+  if (state.isGuest) {
+    const guestTotal = parseInt(localStorage.getItem('divi-guest-msgs') || '0');
+    if (guestTotal >= FREE_MSG_LIMIT) {
+      showToast('Create a free DIVI Account to continue', 'warning');
+      openSignUpForm();
+      return;
+    }
+  } else if (!state.isPro && state.msgCount >= FREE_MSG_LIMIT) {
     openUpgradeModal();
     return;
   }
@@ -546,6 +572,10 @@ async function processUserMessage(text, clarifyContext) {
   });
 
   state.msgCount++;
+  if (state.isGuest) {
+    const gt = parseInt(localStorage.getItem('divi-guest-msgs') || '0') + 1;
+    localStorage.setItem('divi-guest-msgs', gt.toString());
+  }
   updateUsageUI();
   saveCurrentChat();
 
@@ -1149,15 +1179,16 @@ function renderQuizScore() {
 function signOut() {
   const sb = getSupabase();
   if (sb) sb.auth.signOut();
-  localStorage.removeItem('divi-mind-state');
+  state.currentUserId = null;
+  state.isGuest = true;
   location.reload();
 }
 
 // ============================================================
 // AUTH (DIVI Account — Supabase)
 // ============================================================
-const SUPABASE_URL = '';
-const SUPABASE_ANON_KEY = '';
+const SUPABASE_URL = 'https://ogsgfluccctcxdafprgg.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_wVuTLu5EBFNdvMwIotTLfQ_NuS6u3_5';
 let supabaseClient = null;
 
 function getSupabase() {
@@ -1306,20 +1337,51 @@ async function handleForgotPassword(e) {
 }
 
 function setAuthUI(user) {
+  const prevGuest = state.isGuest;
+  const guestChats = prevGuest ? [...state.chatHistory] : [];
+
+  state.currentUserId = user.id;
+  state.isGuest = false;
+
+  const userKey = 'divi-mind-' + user.id;
+  const existing = localStorage.getItem(userKey);
+  if (!existing && guestChats.length > 0) {
+    localStorage.setItem(userKey, JSON.stringify({
+      chatHistory: guestChats,
+      settings: state.settings,
+      isPro: state.isPro,
+    }));
+  }
+
+  state.chatHistory = [];
+  state.messages = [];
+  state.conversationHistory = [];
+  state.currentChatId = null;
+  state.msgCount = 0;
+  loadState();
+
   const name = user.user_metadata?.full_name || user.email?.split('@')[0] || 'Student';
   document.getElementById('welcome-screen').classList.remove('active');
   document.getElementById('account-name').textContent = name;
   document.getElementById('account-email').textContent = user.email || '';
   document.getElementById('avatar-initials').textContent = name.charAt(0).toUpperCase();
   document.getElementById('auth-action-btn').textContent = 'Sign Out';
+
+  renderRecentChats();
+  updateUsageUI();
+  document.getElementById('chat-area').innerHTML = '';
+  showEmptyState();
 }
 
 function continueAsGuest() {
+  state.isGuest = true;
+  state.currentUserId = null;
   document.getElementById('welcome-screen').classList.remove('active');
   document.getElementById('account-name').textContent = 'Guest';
   document.getElementById('account-email').textContent = 'Not signed in';
   document.getElementById('avatar-initials').textContent = 'G';
   document.getElementById('auth-action-btn').textContent = 'Sign In';
+  updateUsageUI();
 }
 
 function handleAuthAction() {
@@ -1337,6 +1399,14 @@ document.addEventListener('DOMContentLoaded', () => {
   sb.auth.getSession().then(({ data: { session } }) => {
     if (session?.user) {
       setAuthUI(session.user);
+    }
+  });
+  sb.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' && session?.user) {
+      setAuthUI(session.user);
+    } else if (event === 'SIGNED_OUT') {
+      state.currentUserId = null;
+      state.isGuest = true;
     }
   });
 });
