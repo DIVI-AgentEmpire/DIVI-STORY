@@ -14,6 +14,35 @@ function ensureApiKey() {
   return true;
 }
 
+function getDailyMsgCount() {
+  if (!state.currentUserId) return 0;
+  try {
+    const key = 'divi-mind-daily-' + state.currentUserId;
+    const raw = localStorage.getItem(key);
+    if (!raw) return 0;
+    const data = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0, 10);
+    if (data.date !== today) return 0;
+    return data.count || 0;
+  } catch (e) { return 0; }
+}
+
+function incrementDailyMsgCount() {
+  if (!state.currentUserId) return;
+  const key = 'divi-mind-daily-' + state.currentUserId;
+  const today = new Date().toISOString().slice(0, 10);
+  let count = 0;
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw) {
+      const data = JSON.parse(raw);
+      if (data.date === today) count = data.count || 0;
+    }
+  } catch (e) {}
+  count++;
+  localStorage.setItem(key, JSON.stringify({ date: today, count }));
+}
+
 // ============================================================
 // STATE
 // ============================================================
@@ -143,7 +172,7 @@ function updateUsageUI() {
   if (state.isGuest) {
     count = parseInt(localStorage.getItem('divi-guest-msgs') || '0');
   } else {
-    count = state.msgCount;
+    count = getDailyMsgCount();
   }
   document.getElementById('usage-badge').textContent = `${count} / ${FREE_MSG_LIMIT} msgs`;
   document.getElementById('msg-count').textContent = `${count} / ${FREE_MSG_LIMIT}`;
@@ -530,7 +559,7 @@ function sendMessage() {
       openSignUpForm();
       return;
     }
-  } else if (!state.isPro && state.msgCount >= FREE_MSG_LIMIT) {
+  } else if (!state.isPro && getDailyMsgCount() >= FREE_MSG_LIMIT) {
     openUpgradeModal();
     return;
   }
@@ -575,6 +604,8 @@ async function processUserMessage(text, clarifyContext) {
   if (state.isGuest) {
     const gt = parseInt(localStorage.getItem('divi-guest-msgs') || '0') + 1;
     localStorage.setItem('divi-guest-msgs', gt.toString());
+  } else if (!state.isPro) {
+    incrementDailyMsgCount();
   }
   updateUsageUI();
   saveCurrentChat();
@@ -1342,6 +1373,7 @@ function setAuthUI(user) {
 
   state.currentUserId = user.id;
   state.isGuest = false;
+  localStorage.removeItem('divi-guest-msgs');
 
   const userKey = 'divi-mind-' + user.id;
   const existing = localStorage.getItem(userKey);
