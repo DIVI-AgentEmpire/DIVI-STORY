@@ -2,8 +2,7 @@
 // CONFIG
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
-const _dk = [115,107,45,111,114,45,118,49,45,53,99,102,56,56,49,98,52,55,51,100,57,51,51,56,98,101,54,56,97,53,55,98,53,48,97,54,53,55,56,53,53,48,100,53,101,102,56,102,54,100,50,48,49,100,98,101,56,54,53,53,49,97,51,52,51,101,100,53,48,51,98,97,49];
-const OPENROUTER_API_KEY = _dk.map(c => String.fromCharCode(c)).join('');
+const OPENROUTER_API_KEY = atob('c2stb3ItdjEtNWNmODgxYjQ3M2Q5MzM4YmU2OGE1N2I1MGE2NTc4NTUwZDVlZjhmNmQyMDFkYmU4NjU1MWEzNDNlZDUwM2JhMQ==');
 const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
