@@ -1112,19 +1112,19 @@ async function generateQuiz() {
 Make questions in past paper exam style. Ensure only one correct answer per question. Return ONLY the JSON array, no other text.`;
 
   try {
-    const res = await fetch(OPENROUTER_URL, {
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.href,
+        'HTTP-Referer': 'https://divi-mind.vercel.app',
         'X-Title': 'DIVI Mind Quiz',
       },
       body: JSON.stringify({
-        model: OPENROUTER_MODEL,
+        model: 'openai/gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Generate 3 MCQ questions from this text:\n\n${truncated}` }
+          { role: 'user', content: 'Generate 3 MCQ questions from this text:\n\n' + truncated }
         ],
         max_tokens: 1500,
         temperature: 0.5,
@@ -1134,7 +1134,7 @@ Make questions in past paper exam style. Ensure only one correct answer per ques
     if (!res.ok) throw new Error('Failed to generate quiz');
 
     const data = await res.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    let content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
 
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('Invalid quiz format');
