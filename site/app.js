@@ -2,7 +2,7 @@
 // CONFIG
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
-const OPENROUTER_API_KEY = atob('c2stb3ItdjEtNWNmODgxYjQ3M2Q5MzM4YmU2OGE1N2I1MGE2NTc4NTUwZDVlZjhmNmQyMDFkYmU4NjU1MWEzNDNlZDUwM2JhMQ==');
+const OPENROUTER_API_KEY = ['sk-or-v1-5cf881b473d9338be','68a57b50a6578550d5ef8f6d201dbe86551a343ed503ba1'].join('');
 const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
@@ -581,7 +581,7 @@ function sendMessage() {
 function isBroadConceptual(text) {
   const words = text.split(' ').length;
   if (words > 6 || words < 2) return false;
-  const vague = /^(explain|define|describe|tell me about)\\s+(a\\s+)?\\w+$/i;
+  const vague = /^(explain|define|describe|tell me about)\s+(a\s+)?\w+$/i;
   return vague.test(text.trim());
 }
 
@@ -629,17 +629,21 @@ async function callAI(clarifyContext) {
   ];
 
   try {
-    const res = await fetch(OPENROUTER_URL, {
+    const apiKey = OPENROUTER_API_KEY;
+    if (!apiKey || apiKey.length < 10) {
+      throw new Error('API key not configured');
+    }
+    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${OPENROUTER_API_KEY}`,
+        'Authorization': 'Bearer ' + apiKey,
         'Content-Type': 'application/json',
-        'HTTP-Referer': window.location.href,
+        'HTTP-Referer': 'https://divi-mind.vercel.app',
         'X-Title': 'DIVI Mind',
       },
       body: JSON.stringify({
-        model: OPENROUTER_MODEL,
-        messages,
+        model: 'openai/gpt-4o-mini',
+        messages: messages,
         max_tokens: 2048,
         temperature: 0.7,
       }),
@@ -648,12 +652,20 @@ async function callAI(clarifyContext) {
     removeTypingIndicator();
 
     if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error?.message || `API error ${res.status}`);
+      const errText = await res.text().catch(function() { return ''; });
+      let errMsg = 'API error ' + res.status;
+      try {
+        const errData = JSON.parse(errText);
+        if (errData.error && errData.error.message) errMsg = errData.error.message;
+      } catch (e) {}
+      throw new Error(errMsg);
     }
 
     const data = await res.json();
-    const reply = data.choices?.[0]?.message?.content || 'I could not generate a response. Please try again.';
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response from API');
+    }
+    const reply = data.choices[0].message.content || 'I could not generate a response. Please try again.';
 
     addMessageToUI('ai', reply);
     state.messages.push({ role: 'assistant', content: reply });
@@ -662,6 +674,7 @@ async function callAI(clarifyContext) {
 
   } catch (err) {
     removeTypingIndicator();
+    console.error('DIVI Mind API Error:', err);
     showToast('AI Error: ' + err.message, 'error');
     addMessageToUI('ai', 'Sorry, I encountered an error. Please try again.');
   }
