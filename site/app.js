@@ -2,7 +2,7 @@
 // CONFIG
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
-const OPENROUTER_API_KEY = ['sk-or-v1-5cf881b473d9338be','68a57b50a6578550d5ef8f6d201dbe86551a343ed503ba1'].join('');
+const OPENROUTER_API_KEY = ['sk-or-v1-16f4b1153d81bb2fb3c0ba','ff5b27274c61533a9872460305a4b6e25aae1356c8'].join('');
 const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
