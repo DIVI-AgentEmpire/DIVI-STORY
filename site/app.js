@@ -2,9 +2,9 @@
 // CONFIG
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
-const OPENROUTER_API_KEY = ['sk-or-v1-16f4b1153d81bb2fb3c0ba','ff5b27274c61533a9872460305a4b6e25aae1356c8'].join('');
-const OPENROUTER_MODEL = 'openai/gpt-4o-mini';
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const GROQ_API_KEY = ['gsk_AMZP8DQKiQUlUMWH56OrWGdy','b3FYUQSoMrfLwGfTcRn2PtsrvwAE'].join('');
+const GROQ_MODEL = 'llama-3.1-8b-instant';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
 const FREE_PAGE_LIMIT = 5;
 const FREE_CHAT_HISTORY_LIMIT = 3;
@@ -629,20 +629,18 @@ async function callAI(clarifyContext) {
   ];
 
   try {
-    const apiKey = OPENROUTER_API_KEY;
+    const apiKey = GROQ_API_KEY;
     if (!apiKey || apiKey.length < 10) {
       throw new Error('API key not configured');
     }
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch(GROQ_URL, {
       method: 'POST',
       headers: {
         'Authorization': 'Bearer ' + apiKey,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://divi-mind.vercel.app',
-        'X-Title': 'DIVI Mind',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
+        model: GROQ_MODEL,
         messages: messages,
         max_tokens: 2048,
         temperature: 0.7,
@@ -1112,16 +1110,14 @@ async function generateQuiz() {
 Make questions in past paper exam style. Ensure only one correct answer per question. Return ONLY the JSON array, no other text.`;
 
   try {
-    const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const res = await fetch(GROQ_URL, {
       method: 'POST',
       headers: {
-        'Authorization': 'Bearer ' + OPENROUTER_API_KEY,
+        'Authorization': 'Bearer ' + GROQ_API_KEY,
         'Content-Type': 'application/json',
-        'HTTP-Referer': 'https://divi-mind.vercel.app',
-        'X-Title': 'DIVI Mind Quiz',
       },
       body: JSON.stringify({
-        model: 'openai/gpt-4o-mini',
+        model: GROQ_MODEL,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: 'Generate 3 MCQ questions from this text:\n\n' + truncated }
