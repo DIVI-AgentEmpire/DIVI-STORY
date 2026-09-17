@@ -341,8 +341,8 @@ function autoResize(el) {
 // PDF UPLOAD
 // ============================================================
 function triggerPdfUpload() {
-  document.getElementById('attach-popover').classList.remove('show');
   if (typeof pdfjsLib === 'undefined') {
+    document.getElementById('attach-popover').classList.remove('show');
     showToast('PDF library still loading. Please wait a moment and try again.', 'error');
     return;
   }
@@ -350,6 +350,7 @@ function triggerPdfUpload() {
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
   document.getElementById('pdf-input').click();
+  document.getElementById('attach-popover').classList.remove('show');
 }
 
 async function handlePdfUpload(e) {
@@ -483,12 +484,13 @@ function pdfNextPage() {
 // IMAGE UPLOAD
 // ============================================================
 function triggerImageUpload() {
-  document.getElementById('attach-popover').classList.remove('show');
   if (!state.isPro) {
+    document.getElementById('attach-popover').classList.remove('show');
     openUpgradeModal();
     return;
   }
   document.getElementById('img-input').click();
+  document.getElementById('attach-popover').classList.remove('show');
 }
 
 async function handleImageUpload(e) {
@@ -509,15 +511,9 @@ async function handleImageUpload(e) {
 
     addImageMessage(base64);
 
-    const userMsg = `I've uploaded an image. Please analyze and describe what you see in this image.`;
+    const userMsg = `I've uploaded an image (${file.name || 'image'}). Please help me study the content shown in this image. If it contains text, diagrams, equations, or study material, please explain and break it down for me.`;
     state.messages.push({ role: 'user', content: userMsg, image: base64 });
-    state.conversationHistory.push({
-      role: 'user',
-      content: [
-        { type: 'text', text: userMsg },
-        { type: 'image_url', image_url: { url: base64 } }
-      ]
-    });
+    state.conversationHistory.push({ role: 'user', content: userMsg });
     state.msgCount++;
     updateUsageUI();
     await callAI();
@@ -630,7 +626,10 @@ async function callAI(clarifyContext) {
   let messages = [
     { role: 'system', content: systemPrompt },
     ...state.conversationHistory.map(m => {
-      if (Array.isArray(m.content)) return { role: m.role, content: m.content };
+      if (Array.isArray(m.content)) {
+        const textParts = m.content.filter(p => p.type === 'text').map(p => p.text).join('\n');
+        return { role: m.role, content: textParts || m.content };
+      }
       return { role: m.role, content: m.content };
     })
   ];
