@@ -3,7 +3,7 @@
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
 const GROQ_API_KEY = ['gsk_AMZP8DQKiQUlUMWH56OrWGdy','b3FYUQSoMrfLwGfTcRn2PtsrvwAE'].join('');
-const GROQ_MODEL = 'llama-3.3-70b-versatile';
+const GROQ_MODEL = 'openai/gpt-oss-20b';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
 const FREE_PAGE_LIMIT = 5;
@@ -345,6 +345,9 @@ function triggerPdfUpload() {
   if (typeof pdfjsLib === 'undefined') {
     showToast('PDF library still loading. Please wait a moment and try again.', 'error');
     return;
+  }
+  if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
   document.getElementById('pdf-input').click();
 }
