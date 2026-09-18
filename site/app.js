@@ -401,9 +401,21 @@ async function handlePdfUpload(e) {
       setTimeout(() => startQuiz(), 500);
     }
 
-    const contextMsg = `I've uploaded a PDF document called \"${file.name}\" with ${pdf.numPages} pages. Please acknowledge the document and let me know you're ready to help me study it.`;
-    addMessageToUI('user', contextMsg);
-    state.messages.push({ role: 'user', content: contextMsg });
+    const extractedText = Object.values(state.pdfPageTexts).join('\n').trim();
+    const extractedPages = Object.keys(state.pdfPageTexts).length;
+
+    let contextMsg;
+    const displayMsg = `I've uploaded "${file.name}" (${pdf.numPages} pages). Please help me study this document.`;
+
+    if (extractedText.length > 0) {
+      const textPreview = extractedText.slice(0, 3000);
+      contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages (${extractedPages} pages extracted). Here is the text content:\n\n${textPreview}\n\nPlease acknowledge you have received the document content and help me study it.`;
+    } else {
+      contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages, but the text could not be extracted (it may be a scanned/image-based PDF). Please let me know how I can help.`;
+    }
+
+    addMessageToUI('user', displayMsg);
+    state.messages.push({ role: 'user', content: displayMsg });
     state.conversationHistory.push({ role: 'user', content: contextMsg });
     state.msgCount++;
     updateUsageUI();
@@ -763,7 +775,12 @@ IMAGES — Use online images to visually explain concepts:
 - Only use DIRECT image URLs (ending in .png, .jpg, .svg, .gif or from upload.wikimedia.org)
 - Place images right after the relevant section heading for maximum visual impact
 
-IMPORTANT: Never use LaTeX math notation (no \\\\[ \\\\], \\\\( \\\\), $$ $$, \\\\text{}, \\\\frac{}{}, etc). Write all math in plain text. Example: Working Capital = Current Assets - Current Liabilities. Use × for multiplication, ÷ for division.`;
+IMPORTANT: Never use LaTeX math notation (no \\\\[ \\\\], \\\\( \\\\), $$ $$, \\\\text{}, \\\\frac{}{}, etc). Write all math in plain text. Example: Working Capital = Current Assets - Current Liabilities. Use × for multiplication, ÷ for division.
+
+PDF ACCESS RULES:
+- All users (free and Pro) can upload and study PDFs. Free users can access the first ${FREE_PAGE_LIMIT} pages.
+- NEVER tell a user that PDF upload or reading is blocked, restricted, or a Pro-only feature.
+- Only mention upgrading to Pro if the user asks about content beyond page ${FREE_PAGE_LIMIT} and they are not Pro. In that case say: "Upgrade to Pro to read beyond page ${FREE_PAGE_LIMIT}."`;
 
   if (clarifyContext) {
     prompt += `\n\nThe student is studying at ${clarifyContext.level} level, subject: ${clarifyContext.subject}. They specifically want: ${clarifyContext.need}. Tailor your response appropriately for their level and need.`;
@@ -776,12 +793,15 @@ IMPORTANT: Never use LaTeX math notation (no \\\\[ \\\\], \\\\( \\\\), $$ $$, \\
   if (state.pdfDoc && Object.keys(state.pdfPageTexts).length > 0) {
     const allText = Object.values(state.pdfPageTexts).join('\n\n---PAGE BREAK---\n\n');
     const truncatedText = allText.slice(0, 8000);
-    prompt += `\n\nThe student has uploaded a document: "${state.pdfFileName}" (${state.pdfPageCount} pages). They are currently viewing page ${state.pdfCurrentPage}.
+    prompt += `\n\nDOCUMENT LOADED — "${state.pdfFileName}" (${state.pdfPageCount} pages, viewing page ${state.pdfCurrentPage}).
+YOU MUST:
+- Use the document content below as the PRIMARY context for your answers.
+- Quote and reference specific parts of the document when answering questions.
+- NEVER ask the student to upload a document — one is already loaded and active.
+- NEVER say the document was not received or that you cannot see it.
 
-DOCUMENT CONTENT (available pages):
-${truncatedText}
-
-Use this document content as context for your answers when relevant. Reference specific parts of the document when helpful.`;
+DOCUMENT CONTENT:
+${truncatedText}`;
   }
 
   return prompt;
