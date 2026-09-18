@@ -73,6 +73,10 @@ let state = {
 // ============================================================
 // INIT
 // ============================================================
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   loadState();
   updateUsageUI();
@@ -82,10 +86,6 @@ document.addEventListener('DOMContentLoaded', () => {
   setupInputListener();
   updateQuizButton();
   updateImageAttachOption();
-
-  if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  }
 });
 
 function getStorageKey() {
@@ -343,7 +343,7 @@ function autoResize(el) {
 function triggerPdfUpload() {
   if (typeof pdfjsLib === 'undefined') {
     document.getElementById('attach-popover').classList.remove('show');
-    showToast('PDF library still loading. Please wait a moment and try again.', 'error');
+    showToast('PDF library not available. Please refresh the page.', 'error');
     return;
   }
   if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
@@ -351,6 +351,22 @@ function triggerPdfUpload() {
   }
   document.getElementById('pdf-input').click();
   document.getElementById('attach-popover').classList.remove('show');
+}
+
+async function extractPdfText(pdf, maxPages) {
+  const texts = {};
+  for (let i = 1; i <= maxPages; i++) {
+    try {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map(item => item.str).join(' ').trim();
+      texts[i] = pageText;
+    } catch (err) {
+      console.warn('PDF page ' + i + ' extraction failed:', err);
+      texts[i] = '';
+    }
+  }
+  return texts;
 }
 
 async function handlePdfUpload(e) {
@@ -373,7 +389,15 @@ async function handlePdfUpload(e) {
 
   try {
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    } catch (loadErr) {
+      console.warn('PDF load with worker failed, retrying without worker:', loadErr);
+      pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+      pdf = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+    }
 
     state.pdfDoc = pdf;
     state.pdfFileName = file.name;
@@ -383,35 +407,47 @@ async function handlePdfUpload(e) {
     state.quizUsedForDoc = false;
 
     const maxPages = state.isPro ? pdf.numPages : Math.min(pdf.numPages, FREE_PAGE_LIMIT);
-    for (let i = 1; i <= maxPages; i++) {
+
+    state.pdfPageTexts = await extractPdfText(pdf, maxPages);
+
+    const allExtracted = Object.values(state.pdfPageTexts).join(' ').trim();
+    if (allExtracted.length === 0) {
+      console.warn('First extraction yielded no text, retrying without worker...');
       try {
-        const page = await pdf.getPage(i);
-        const textContent = await page.getTextContent();
-        state.pdfPageTexts[i] = textContent.items.map(item => item.str).join(' ');
-      } catch (err) {
-        state.pdfPageTexts[i] = '';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '';
+        const pdf2 = await pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) }).promise;
+        state.pdfDoc = pdf2;
+        state.pdfPageTexts = await extractPdfText(pdf2, maxPages);
+      } catch (retryErr) {
+        console.warn('Worker-less retry also failed:', retryErr);
       }
     }
 
     addPdfCard(file.name, pdf.numPages);
     updateQuizButton();
-    showToast('PDF loaded successfully', 'success');
+
+    const extractedText = Object.values(state.pdfPageTexts).join('\n').trim();
+    const extractedPages = Object.keys(state.pdfPageTexts).length;
+    const nonEmptyPages = Object.values(state.pdfPageTexts).filter(t => t.trim().length > 0).length;
+
+    if (nonEmptyPages > 0) {
+      showToast('PDF loaded — ' + nonEmptyPages + ' page(s) extracted', 'success');
+    } else {
+      showToast('PDF loaded but no text found (scanned PDF?)', 'warning');
+    }
 
     if (state.settings.autoQuiz) {
       setTimeout(() => startQuiz(), 500);
     }
 
-    const extractedText = Object.values(state.pdfPageTexts).join('\n').trim();
-    const extractedPages = Object.keys(state.pdfPageTexts).length;
-
     let contextMsg;
     const displayMsg = `I've uploaded "${file.name}" (${pdf.numPages} pages). Please help me study this document.`;
 
     if (extractedText.length > 0) {
-      const textPreview = extractedText.slice(0, 3000);
-      contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages (${extractedPages} pages extracted). Here is the text content:\n\n${textPreview}\n\nPlease acknowledge you have received the document content and help me study it.`;
+      const textPreview = extractedText.slice(0, 4000);
+      contextMsg = `[DOCUMENT CONTENT START]\nDocument: "${file.name}" (${pdf.numPages} pages, ${nonEmptyPages} pages with text extracted)\n\n${textPreview}\n[DOCUMENT CONTENT END]\n\nI have uploaded this document. Use the text above to help me study. Summarize what this document is about and ask what I'd like to focus on.`;
     } else {
-      contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages, but the text could not be extracted (it may be a scanned/image-based PDF). Please let me know how I can help.`;
+      contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages, but no readable text was found (it may be a scanned/image-based PDF). Please let me know how I can help.`;
     }
 
     addMessageToUI('user', displayMsg);
@@ -421,6 +457,7 @@ async function handlePdfUpload(e) {
     updateUsageUI();
     await callAI();
   } catch (err) {
+    console.error('PDF upload failed:', err);
     showToast('Failed to load PDF: ' + err.message, 'error');
   }
 }
@@ -697,111 +734,48 @@ async function callAI(clarifyContext) {
 }
 
 function buildSystemPrompt(clarifyContext) {
-  let prompt = `You are DIVI Mind, an expert AI academic tutor. Your #1 rule: SHOW, don't tell. Be extremely visual and use minimal text.
+  const hasDocument = state.pdfDoc && state.pdfPageTexts;
+  let docText = '';
+  let docMeta = '';
 
-RESPONSE STYLE — Visual-first, minimal text:
-- MAXIMUM 1-2 short sentences of explanation per section. Never write paragraphs.
-- Replace explanations with TABLES, DIAGRAMS, FLOWCHARTS, and VISUAL STRUCTURES.
-- Every answer MUST contain at least one table or visual diagram.
-- Use emoji as visual markers extensively: \u{1F4CC} key point, ✅ correct, ❌ wrong, \u{1F4A1} tip, ⚠️ caution, \u{1F3AF} exam focus, \u{1F4D6} definition, ✏️ example, ⭐ important, \u{1F511} key term, \u{1F4CA} data, \u{1F504} process, ➡️ leads to, \u{1F3C6} best practice.
+  if (hasDocument) {
+    const pageEntries = Object.entries(state.pdfPageTexts)
+      .filter(([_, text]) => text.trim().length > 0)
+      .map(([num, text]) => `--- Page ${num} ---\n${text}`);
+    if (pageEntries.length > 0) {
+      docText = pageEntries.join('\n\n').slice(0, 6000);
+      docMeta = `"${state.pdfFileName}" (${state.pdfPageCount} pages, viewing page ${state.pdfCurrentPage})`;
+    }
+  }
 
-VISUAL FORMATS to use (pick the best fit):
+  let prompt;
 
-1. **TABLES** — Use for everything possible:
-   | Term | Meaning | Example |
-   |------|---------|--------|
-   | ... | ... | ... |
+  if (docText.length > 0) {
+    prompt = `You are DIVI Mind, an AI tutor. A document is loaded: ${docMeta}.
+Use visual formatting: tables, numbered steps, emoji markers. Keep text brief. No LaTeX math — use plain text. No paragraphs — use tables and lists.
+CRITICAL: The document content below is ALREADY LOADED. NEVER say you cannot see it. NEVER ask the user to upload anything. Answer questions using this content.
 
-2. **FLOWCHARTS** using arrows — for processes, sequences, cause-effect:
-   Step 1 ➡️ Step 2 ➡️ Step 3 ➡️ Result
+DOCUMENT CONTENT:
+${docText}`;
+  } else {
+    prompt = `You are DIVI Mind, an expert AI academic tutor. Your #1 rule: SHOW, don't tell. Be visual and use minimal text.
+RESPONSE STYLE: Use tables, flowcharts, diagrams. Max 1-2 sentences per section. Use emoji markers. Every answer needs at least one table or visual.
+FORMATTING: Use ### headings, --- rules, > blockquotes for tips/formulas. Tables for comparisons. Arrow flowcharts for processes.
+IMAGES: Include 1-2 relevant Wikipedia/Wikimedia images per answer using ![desc](url).
+MATH: No LaTeX. Plain text only. Use x for multiply, / for divide.
+PDF RULES: All users can upload PDFs. Free users access first ${FREE_PAGE_LIMIT} pages. NEVER say PDF upload is blocked or Pro-only.`;
 
-3. **COMPARISON BOXES** — Always use tables for comparing:
-   | Feature | Option A | Option B |
-   |---------|----------|----------|
-   | ... | ✅ | ❌ |
-
-4. **FORMULA BOXES** — wrap formulas in blockquotes:
-   > \u{1F511} **Formula**: Revenue - Expenses = Profit
-
-5. **VISUAL LISTS with emoji** — instead of plain bullets:
-   - ✅ Do this
-   - ❌ Not this
-   - \u{1F4A1} Remember this
-
-6. **TREE/HIERARCHY structures**:
-   **Main Topic**
-   ├── Sub-topic 1
-   │   ├── Detail A
-   │   └── Detail B
-   └── Sub-topic 2
-
-7. **STEP-BY-STEP with visual numbers**:
-   **1️⃣** First step
-   **2️⃣** Second step
-   **3️⃣** Third step
-
-8. **QUICK SUMMARY CARDS** at the end:
-   > ⭐ **Key Takeaway**: One line summary
-
-9. **EXAM TIP BOXES**:
-   > \u{1F3AF} **Examiner wants**: specific marking point
-
-STRUCTURE every answer like this:
-- \u{1F4D6} **One-line definition** (if applicable)
-- \u{1F4CA} **Visual breakdown** (table/diagram/flowchart — this is the MAIN part, make it big)
-- ✏️ **Worked example** in a table or step-by-step visual
-- \u{1F3AF} **Exam tip** in a blockquote
-- ❌ **Common mistakes** as a short visual list
-
-CRITICAL RULES:
-- Keep text to absolute minimum. If you can show it in a table, DO IT.
-- Never write more than 2 sentences in a row without a visual element.
-- Use headings (###, ####) to separate sections.
-- Use --- horizontal rules between major sections.
-- Use > blockquotes for tips, formulas, and key takeaways.
-- When comparing anything, ALWAYS use a table with ✅/❌ markers.
-- For processes, ALWAYS use arrow flowcharts or numbered steps.
-- Make the visual diagram/table the LARGEST part of your answer.
-- Be warm and encouraging but BRIEF. One emoji phrase beats one paragraph.
-
-IMAGES — Use online images to visually explain concepts:
-- Include 1-2 relevant images per answer using markdown: ![description](url)
-- Use images from Wikipedia/Wikimedia Commons (upload.wikimedia.org), or other direct image URLs
-- For science: diagrams, cell structures, circuits, anatomy, chemical structures
-- For math: geometric shapes, graphs, coordinate planes
-- For economics/business: charts, supply-demand curves, market diagrams
-- For geography/history: maps, historical images, landmarks
-- Example: ![Supply and Demand Curve](https://upload.wikimedia.org/wikipedia/commons/thumb/7/7a/Supply-and-demand.svg/400px-Supply-and-demand.svg.png)
-- Only use DIRECT image URLs (ending in .png, .jpg, .svg, .gif or from upload.wikimedia.org)
-- Place images right after the relevant section heading for maximum visual impact
-
-IMPORTANT: Never use LaTeX math notation (no \\\\[ \\\\], \\\\( \\\\), $$ $$, \\\\text{}, \\\\frac{}{}, etc). Write all math in plain text. Example: Working Capital = Current Assets - Current Liabilities. Use × for multiplication, ÷ for division.
-
-PDF ACCESS RULES:
-- All users (free and Pro) can upload and study PDFs. Free users can access the first ${FREE_PAGE_LIMIT} pages.
-- NEVER tell a user that PDF upload or reading is blocked, restricted, or a Pro-only feature.
-- Only mention upgrading to Pro if the user asks about content beyond page ${FREE_PAGE_LIMIT} and they are not Pro. In that case say: "Upgrade to Pro to read beyond page ${FREE_PAGE_LIMIT}."`;
+    if (hasDocument && docText.length === 0) {
+      prompt += `\n\nA PDF "${state.pdfFileName}" (${state.pdfPageCount} pages) was uploaded but no readable text was extracted (scanned/image PDF). Acknowledge it was uploaded but explain the text could not be read.`;
+    }
+  }
 
   if (clarifyContext) {
-    prompt += `\n\nThe student is studying at ${clarifyContext.level} level, subject: ${clarifyContext.subject}. They specifically want: ${clarifyContext.need}. Tailor your response appropriately for their level and need.`;
+    prompt += `\n\nStudent level: ${clarifyContext.level}, subject: ${clarifyContext.subject}, need: ${clarifyContext.need}.`;
   }
 
   if (state.settings.groundedReplies) {
-    prompt += `\n\nIMPORTANT: Only provide information that you are highly confident about. If you're unsure, say so. Stick strictly to established academic content.`;
-  }
-
-  if (state.pdfDoc && Object.keys(state.pdfPageTexts).length > 0) {
-    const allText = Object.values(state.pdfPageTexts).join('\n\n---PAGE BREAK---\n\n');
-    const truncatedText = allText.slice(0, 8000);
-    prompt += `\n\nDOCUMENT LOADED — "${state.pdfFileName}" (${state.pdfPageCount} pages, viewing page ${state.pdfCurrentPage}).
-YOU MUST:
-- Use the document content below as the PRIMARY context for your answers.
-- Quote and reference specific parts of the document when answering questions.
-- NEVER ask the student to upload a document — one is already loaded and active.
-- NEVER say the document was not received or that you cannot see it.
-
-DOCUMENT CONTENT:
-${truncatedText}`;
+    prompt += `\n\nOnly provide information you are highly confident about. If unsure, say so.`;
   }
 
   return prompt;
