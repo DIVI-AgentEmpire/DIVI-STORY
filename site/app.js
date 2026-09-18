@@ -3,7 +3,7 @@
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
 const GROQ_API_KEY = ['gsk_AMZP8DQKiQUlUMWH56OrWGdy','b3FYUQSoMrfLwGfTcRn2PtsrvwAE'].join('');
-const GROQ_MODEL = 'openai/gpt-oss-20b';
+const GROQ_MODEL = 'openai/gpt-oss-120b';
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
 const FREE_PAGE_LIMIT = 5;
@@ -64,6 +64,7 @@ let state = {
     autoQuiz: false,
     saveHistory: true,
     groundedReplies: false,
+    sendPdfContext: false,
     notifications: true,
   },
   clarifySelections: {},
@@ -444,8 +445,8 @@ async function handlePdfUpload(e) {
     const displayMsg = `I've uploaded "${file.name}" (${pdf.numPages} pages). Please help me study this document.`;
 
     if (extractedText.length > 0) {
-      const textPreview = extractedText.slice(0, 4000);
-      contextMsg = `[DOCUMENT CONTENT START]\nDocument: "${file.name}" (${pdf.numPages} pages, ${nonEmptyPages} pages with text extracted)\n\n${textPreview}\n[DOCUMENT CONTENT END]\n\nI have uploaded this document. Use the text above to help me study. Summarize what this document is about and ask what I'd like to focus on.`;
+      const textPreview = extractedText.slice(0, 2000);
+      contextMsg = `[DOCUMENT CONTENT START]\nDocument: "${file.name}" (${pdf.numPages} pages, ${nonEmptyPages} with text)\n\n${textPreview}\n[DOCUMENT CONTENT END]\n\nSummarize this document and ask what I'd like to focus on.`;
     } else {
       contextMsg = `I've uploaded a PDF document called "${file.name}" with ${pdf.numPages} pages, but no readable text was found (it may be a scanned/image-based PDF). Please let me know how I can help.`;
     }
@@ -671,10 +672,15 @@ async function callAI(clarifyContext) {
   if (!ensureApiKey()) return;
   showTypingIndicator();
 
-  let systemPrompt = buildSystemPrompt(clarifyContext);
+  const lastUserMsg = state.conversationHistory.length > 0
+    ? state.conversationHistory[state.conversationHistory.length - 1].content || ''
+    : '';
+  let systemPrompt = buildSystemPrompt(clarifyContext, lastUserMsg);
+
+  const recentHistory = state.conversationHistory.slice(-4);
   let messages = [
     { role: 'system', content: systemPrompt },
-    ...state.conversationHistory.map(m => {
+    ...recentHistory.map(m => {
       if (Array.isArray(m.content)) {
         const textParts = m.content.filter(p => p.type === 'text').map(p => p.text).join('\n');
         return { role: m.role, content: textParts || m.content };
@@ -733,49 +739,42 @@ async function callAI(clarifyContext) {
   }
 }
 
-function buildSystemPrompt(clarifyContext) {
-  const hasDocument = state.pdfDoc && state.pdfPageTexts;
-  let docText = '';
-  let docMeta = '';
+function shouldIncludePdfContext(userMsg) {
+  if (!state.pdfDoc || !state.pdfPageTexts) return false;
+  if (state.settings.sendPdfContext) return true;
+  const keywords = /\b(pdf|document|file|page|upload|chapter|section|text|content|summarize|summary|explain|quiz|study|notes|what does|what is|read|passage|paragraph)\b/i;
+  if (keywords.test(userMsg)) return true;
+  if (state.conversationHistory.length <= 2) return true;
+  return false;
+}
 
-  if (hasDocument) {
+function buildSystemPrompt(clarifyContext, lastUserMsg) {
+  const hasDocument = state.pdfDoc && state.pdfPageTexts;
+  const includePdf = shouldIncludePdfContext(lastUserMsg || '');
+
+  let prompt = `You are DIVI Mind, an AI tutor. Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual.`;
+
+  if (hasDocument && includePdf) {
     const pageEntries = Object.entries(state.pdfPageTexts)
       .filter(([_, text]) => text.trim().length > 0)
-      .map(([num, text]) => `--- Page ${num} ---\n${text}`);
-    if (pageEntries.length > 0) {
-      docText = pageEntries.join('\n\n').slice(0, 6000);
-      docMeta = `"${state.pdfFileName}" (${state.pdfPageCount} pages, viewing page ${state.pdfCurrentPage})`;
+      .map(([num, text]) => `[Page ${num}] ${text}`);
+    const docText = pageEntries.join('\n').slice(0, 2000);
+
+    if (docText.length > 0) {
+      prompt += `\nDocument "${state.pdfFileName}" (${state.pdfPageCount} pages) is loaded. Answer from this content. NEVER say you cannot see it.\n\n${docText}`;
+    } else {
+      prompt += `\nA PDF "${state.pdfFileName}" was uploaded but no readable text was extracted (scanned PDF).`;
     }
-  }
-
-  let prompt;
-
-  if (docText.length > 0) {
-    prompt = `You are DIVI Mind, an AI tutor. A document is loaded: ${docMeta}.
-Use visual formatting: tables, numbered steps, emoji markers. Keep text brief. No LaTeX math — use plain text. No paragraphs — use tables and lists.
-CRITICAL: The document content below is ALREADY LOADED. NEVER say you cannot see it. NEVER ask the user to upload anything. Answer questions using this content.
-
-DOCUMENT CONTENT:
-${docText}`;
-  } else {
-    prompt = `You are DIVI Mind, an expert AI academic tutor. Your #1 rule: SHOW, don't tell. Be visual and use minimal text.
-RESPONSE STYLE: Use tables, flowcharts, diagrams. Max 1-2 sentences per section. Use emoji markers. Every answer needs at least one table or visual.
-FORMATTING: Use ### headings, --- rules, > blockquotes for tips/formulas. Tables for comparisons. Arrow flowcharts for processes.
-IMAGES: Include 1-2 relevant Wikipedia/Wikimedia images per answer using ![desc](url).
-MATH: No LaTeX. Plain text only. Use x for multiply, / for divide.
-PDF RULES: All users can upload PDFs. Free users access first ${FREE_PAGE_LIMIT} pages. NEVER say PDF upload is blocked or Pro-only.`;
-
-    if (hasDocument && docText.length === 0) {
-      prompt += `\n\nA PDF "${state.pdfFileName}" (${state.pdfPageCount} pages) was uploaded but no readable text was extracted (scanned/image PDF). Acknowledge it was uploaded but explain the text could not be read.`;
-    }
+  } else if (hasDocument) {
+    prompt += `\nDocument "${state.pdfFileName}" is loaded. The user may ask about it.`;
   }
 
   if (clarifyContext) {
-    prompt += `\n\nStudent level: ${clarifyContext.level}, subject: ${clarifyContext.subject}, need: ${clarifyContext.need}.`;
+    prompt += `\nLevel: ${clarifyContext.level}, subject: ${clarifyContext.subject}, need: ${clarifyContext.need}.`;
   }
 
   if (state.settings.groundedReplies) {
-    prompt += `\n\nOnly provide information you are highly confident about. If unsure, say so.`;
+    prompt += `\nOnly state what you are confident about.`;
   }
 
   return prompt;
