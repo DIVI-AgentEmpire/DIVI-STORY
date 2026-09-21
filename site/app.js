@@ -8,6 +8,7 @@ const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 const FREE_MSG_LIMIT = 15;
 const FREE_PAGE_LIMIT = 5;
 const FREE_CHAT_HISTORY_LIMIT = 3;
+const IS_AMAZON_DEVICE = /\b(Silk|KFTT|Amazon)\b/i.test(navigator.userAgent);
 
 function ensureApiKey() {
   return true;
@@ -87,6 +88,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setupInputListener();
   updateQuizButton();
   updateImageAttachOption();
+  if (IS_AMAZON_DEVICE) {
+    var proBtn = document.querySelector('.btn-upgrade');
+    if (proBtn) proBtn.style.display = 'none';
+    var proCard = document.querySelector('.pro-card');
+    if (proCard) proCard.parentElement.style.display = 'none';
+  }
 });
 
 function getStorageKey() {
@@ -607,6 +614,10 @@ function sendMessage() {
   if (state.isGuest) {
     const guestTotal = parseInt(localStorage.getItem('divi-guest-msgs') || '0');
     if (guestTotal >= FREE_MSG_LIMIT) {
+      if (IS_AMAZON_DEVICE) {
+        showToast("You've reached the free limit. Visit divi-mind.vercel.app on your browser for unlimited access.", 'warning');
+        return;
+      }
       showToast('Create a free DIVI Account to continue', 'warning');
       openSignUpForm();
       return;
@@ -1049,6 +1060,10 @@ function updateClarifyDots() {
 // UPGRADE MODAL
 // ============================================================
 function openUpgradeModal() {
+  if (IS_AMAZON_DEVICE) {
+    showToast("You've reached the free limit. Visit divi-mind.vercel.app on your browser for unlimited access.", 'warning');
+    return;
+  }
   document.getElementById('upgrade-modal').classList.add('open');
 }
 
@@ -1057,6 +1072,7 @@ function closeUpgradeModal() {
 }
 
 function upgradePro() {
+  if (IS_AMAZON_DEVICE) return;
   window.open(LEMON_SQUEEZY_URL, '_blank');
 }
 
