@@ -927,6 +927,8 @@ function renderMarkdown(text) {
     return `%%CODEBLOCK_${codeBlocks.length - 1}%%`;
   });
 
+  text = text.replace(/\\([*_~`#>+\-])/g, '$1');
+
   const tables = [];
   text = text.replace(/(?:^|\n)((?:\|[^\n]+\|\n){2,})/g, (match, tableBlock) => {
     const rows = tableBlock.trim().split('\n');
@@ -966,6 +968,7 @@ function renderMarkdown(text) {
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img class="concept-img" src="$2" alt="$1" onerror="this.style.display=\'none\'">');
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
   html = html.replace(/\*\*([\s\S]+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__([\s\S]+?)__/g, '<strong>$1</strong>');
   html = html.replace(/^#### (.+)$/gm, '<h4>$1</h4>');
   html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
