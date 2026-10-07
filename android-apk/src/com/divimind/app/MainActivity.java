@@ -3,6 +3,8 @@ package com.divimind.app;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.KeyEvent;
@@ -12,18 +14,24 @@ import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 
 public class MainActivity extends Activity {
     private WebView webView;
     private ProgressBar progressBar;
+    private LinearLayout errorView;
     private static final String APP_URL = "https://divi-mind.vercel.app";
 
     private ValueCallback<Uri[]> fileUploadCallback;
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private boolean hasLoadedOnce = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -38,6 +46,17 @@ public class MainActivity extends Activity {
 
         webView = (WebView) findViewById(R.id.webview);
         progressBar = (ProgressBar) findViewById(R.id.progressBar);
+        errorView = (LinearLayout) findViewById(R.id.errorView);
+
+        Button retryBtn = (Button) findViewById(R.id.retryBtn);
+        if (retryBtn != null) {
+            retryBtn.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    reloadApp();
+                }
+            });
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -63,26 +82,52 @@ public class MainActivity extends Activity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 progressBar.setVisibility(View.VISIBLE);
+                if (errorView != null) errorView.setVisibility(View.GONE);
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 progressBar.setVisibility(View.GONE);
+                hasLoadedOnce = true;
+                if (webView.getVisibility() != View.VISIBLE) {
+                    webView.setVisibility(View.VISIBLE);
+                }
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                if (request.isForMainFrame()) {
+                    progressBar.setVisibility(View.GONE);
+                    showError();
+                }
             }
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
                 if (url.startsWith("https://divi-mind.vercel.app") ||
                     url.contains("supabase.co") ||
-                    url.contains("groq.com")) {
+                    url.contains("groq.com") ||
+                    url.contains("cdnjs.cloudflare.com") ||
+                    url.contains("cdn.jsdelivr.net") ||
+                    url.contains("fonts.googleapis.com") ||
+                    url.contains("fonts.gstatic.com")) {
                     return false;
+                }
+                if (url.startsWith("upi://")) {
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        startActivity(intent);
+                    } catch (Exception e) {}
+                    return true;
                 }
                 if (url.contains("lemonsqueezy.com")) {
                     Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
                     startActivity(intent);
                     return true;
                 }
-                return false;
+                Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                startActivity(intent);
+                return true;
             }
         });
 
@@ -110,8 +155,50 @@ public class MainActivity extends Activity {
         if (savedInstanceState != null) {
             webView.restoreState(savedInstanceState);
         } else {
+            loadApp();
+        }
+    }
+
+    private void loadApp() {
+        if (isOnline()) {
+            webView.getSettings().setCacheMode(WebSettings.LOAD_DEFAULT);
+            webView.setVisibility(View.VISIBLE);
+            if (errorView != null) errorView.setVisibility(View.GONE);
+            webView.loadUrl(APP_URL);
+        } else if (hasLoadedOnce) {
+            webView.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ONLY);
+            webView.setVisibility(View.VISIBLE);
+            if (errorView != null) errorView.setVisibility(View.GONE);
+            webView.loadUrl(APP_URL);
+        } else {
+            showError();
+        }
+    }
+
+    private void reloadApp() {
+        if (errorView != null) errorView.setVisibility(View.GONE);
+        progressBar.setVisibility(View.VISIBLE);
+        webView.setVisibility(View.VISIBLE);
+        if (isOnline()) {
+            webView.getSettings().setCacheMode(WebSettings.LOAD_NO_CACHE);
+            webView.loadUrl(APP_URL);
+        } else {
+            webView.getSettings().setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
             webView.loadUrl(APP_URL);
         }
+    }
+
+    private void showError() {
+        webView.setVisibility(View.GONE);
+        progressBar.setVisibility(View.GONE);
+        if (errorView != null) errorView.setVisibility(View.VISIBLE);
+    }
+
+    private boolean isOnline() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        if (cm == null) return false;
+        NetworkInfo info = cm.getActiveNetworkInfo();
+        return info != null && info.isConnected();
     }
 
     @Override

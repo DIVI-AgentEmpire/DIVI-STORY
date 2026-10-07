@@ -9,6 +9,59 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <LinearLayout
+        android:id="@+id/errorView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:padding="32dp"
+        android:visibility="gone"
+        android:background="#0D1121">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="D"
+            android:textSize="48sp"
+            android:textColor="#7C3AED"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium"
+            android:layout_marginBottom="16dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="No Internet Connection"
+            android:textSize="18sp"
+            android:textColor="#E5E7EB"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Connect to the internet to use DIVI Mind"
+            android:textSize="14sp"
+            android:textColor="#9CA3AF"
+            android:gravity="center"
+            android:layout_marginBottom="24dp" />
+
+        <Button
+            android:id="@+id/retryBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="48dp"
+            android:paddingStart="32dp"
+            android:paddingEnd="32dp"
+            android:text="Try Again"
+            android:textColor="#FFFFFF"
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:textStyle="bold"
+            android:background="#7C3AED" />
+
+    </LinearLayout>
+
     <ProgressBar
         android:id="@+id/progressBar"
         android:layout_width="48dp"
