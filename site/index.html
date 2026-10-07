@@ -95,13 +95,17 @@
 <span class="toggle-label">Notifications</span>
 <div class="toggle on" id="toggle-notif" onclick="toggleSetting('notifications',this)"></div>
 </div>
+<div class="toggle-row" id="lang-toggle-row" style="display:none">
+<span class="toggle-label">&#3221;&#3240;&#3277;&#3240;&#3233; + English</span>
+<div class="toggle" id="toggle-lang" onclick="toggleLanguageMode(this)"></div>
+</div>
 </div>
 
 <div class="sidebar-section" style="padding-top:0">
-<div class="pro-card">
+<div class="pro-card" id="sidebar-pro-card">
 <h3>DIVI Mind Pro</h3>
 <p>Unlimited PDFs, chat, quizzes, and image uploads</p>
-<button onclick="openUpgradeModal()">Explore Pro &#183; $6.99/mo</button>
+<button onclick="openUpgradeModal()" id="sidebar-pro-btn">Explore Pro &#183; $6.99/mo</button>
 </div>
 </div>
 
@@ -363,6 +367,82 @@ Image
 <button type="submit" class="auth-submit" id="forgot-submit-btn">Send Reset Link</button>
 </form>
 <p class="auth-switch"><a href="#" onclick="event.preventDefault();closeForgotPassword();openSignInForm()">Back to sign in</a></p>
+</div>
+</div>
+</div>
+
+<!-- India Upgrade Modal -->
+<div class="modal-overlay" id="india-upgrade-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>Upgrade to DIVI Mind Pro</h3>
+<button class="modal-close" onclick="closeIndiaUpgradeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+<div class="upgrade-price">
+<div class="amount">&#8377;99</div>
+<div class="period">per month</div>
+</div>
+<ul class="upgrade-features">
+<li>Unlimited PDF uploads</li>
+<li>Unlimited AI chat messages</li>
+<li>All pages in documents</li>
+<li>Unlimited quizzes</li>
+<li>Image upload &amp; analysis</li>
+<li>Full chat history</li>
+</ul>
+<div class="upi-section">
+<p class="upi-label">Pay via UPI</p>
+<div class="upi-qr-placeholder" id="upi-qr">
+<div class="qr-placeholder-text">&#128179; UPI QR</div>
+<p style="font-size:10px;color:#999;margin-top:4px">Coming soon</p>
+</div>
+<p class="upi-hint">Scan with GPay, PhonePe, Paytm or any UPI app</p>
+<p class="india-price-note">After payment, share screenshot with us and receive your Pro code within minutes.</p>
+</div>
+<button class="btn-pro" onclick="openProCodeModal()">I have a Pro code &#8594;</button>
+<button class="btn-later" onclick="closeIndiaUpgradeModal()">Maybe later</button>
+</div>
+</div>
+</div>
+
+<!-- Pro Code Modal -->
+<div class="modal-overlay" id="procode-modal">
+<div class="modal auth-modal">
+<div class="modal-header">
+<h3>Enter Pro Code</h3>
+<button class="modal-close" onclick="closeProCodeModal()">&#10005;</button>
+</div>
+<div class="modal-body">
+<p class="auth-desc">Enter the Pro activation code you received after payment.</p>
+<div class="auth-field">
+<label>Pro Code</label>
+<input type="text" id="procode-input" placeholder="DIVI-XXXX-XXXX">
+</div>
+<button class="auth-submit" onclick="submitProCode()">Activate Pro</button>
+</div>
+</div>
+</div>
+
+<!-- Admin Panel Modal -->
+<div class="modal-overlay" id="admin-modal">
+<div class="modal">
+<div class="modal-header">
+<h3>DIVI Admin Panel</h3>
+<button class="modal-close" onclick="closeAdminPanel()">&#10005;</button>
+</div>
+<div class="modal-body">
+<div class="auth-field">
+<label>Student Email (optional note)</label>
+<input type="text" id="admin-email" placeholder="student@example.com">
+</div>
+<button class="auth-submit" onclick="generateAdminCode()">Generate Pro Code</button>
+<div id="admin-code-result" style="display:none;margin-top:16px;padding:16px;background:var(--surface);border-radius:8px;text-align:center">
+<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">ACTIVATION CODE</div>
+<div id="admin-generated-code" style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--teal);letter-spacing:2px"></div>
+<button onclick="copyAdminCode()" style="margin-top:12px;padding:8px 20px;border-radius:8px;background:var(--purple);color:#fff;font-size:13px;font-weight:600">Copy Code</button>
+</div>
+<div id="admin-codes-list" style="margin-top:20px"></div>
 </div>
 </div>
 </div>

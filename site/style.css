@@ -547,3 +547,40 @@ text-decoration:none;margin:-4px 0 8px;
 @media(min-width:768px){
 .sidebar{width:340px}
 }
+
+/* Trial badge */
+.trial-badge{
+font-family:var(--font-mono);font-size:10px;font-weight:600;
+background:linear-gradient(135deg,var(--purple),var(--teal));
+color:#fff;padding:2px 8px;border-radius:10px;display:inline-block;margin-left:6px;
+}
+
+/* UPI Section */
+.upi-section{
+text-align:center;margin:20px 0;padding:16px;
+background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);
+}
+.upi-label{font-family:var(--font-heading);font-size:14px;font-weight:600;margin-bottom:12px}
+.upi-qr-placeholder{
+width:200px;height:200px;margin:0 auto 12px;background:#fff;
+border-radius:var(--radius-sm);display:flex;flex-direction:column;
+align-items:center;justify-content:center;
+}
+.upi-qr-placeholder img{width:100%;height:100%;object-fit:contain;border-radius:var(--radius-sm)}
+.qr-placeholder-text{font-size:14px;color:#666;font-weight:600}
+.upi-hint{font-size:11px;color:var(--text-dim);margin-top:4px}
+
+/* Admin panel */
+.admin-code-item{
+display:flex;justify-content:space-between;align-items:center;
+padding:10px;background:var(--surface);border-radius:var(--radius-sm);
+margin-bottom:6px;font-size:12px;
+}
+.admin-code-item .code-text{font-family:var(--font-mono);font-weight:600;color:var(--teal)}
+.admin-code-item .code-email{color:var(--text-dim);font-size:11px}
+
+/* India price section */
+.india-price-note{text-align:center;font-size:11px;color:var(--text-dim);margin:8px 0 0;line-height:1.5}
+
+/* Pro code input */
+#procode-input{text-transform:uppercase;letter-spacing:2px;font-family:var(--font-mono);text-align:center;font-size:16px}

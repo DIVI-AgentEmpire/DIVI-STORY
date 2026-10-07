@@ -9,6 +9,19 @@ const FREE_MSG_LIMIT = 15;
 const FREE_PAGE_LIMIT = 5;
 const FREE_CHAT_HISTORY_LIMIT = 3;
 const IS_AMAZON_DEVICE = /\b(Silk|KFTT|Amazon)\b/i.test(navigator.userAgent);
+const INDIA_UPI_PRICE = '₹99/month';
+const TRIAL_DAYS = 7;
+const TRIAL_DAILY_MSG_LIMIT = 50;
+const ADMIN_SECRET = 'divi2024';
+
+function detectIndia() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (tz === 'Asia/Kolkata' || tz === 'Asia/Calcutta' || tz === 'Asia/Colombo') return true;
+    if (new Date().getTimezoneOffset() === -330) return true;
+  } catch(e) {}
+  return false;
+}
 
 function ensureApiKey() {
   return true;
@@ -70,6 +83,8 @@ let state = {
   },
   clarifySelections: {},
   pendingUserMessage: '',
+  langMode: 'en',
+  isIndia: false,
 };
 
 // ============================================================
@@ -80,6 +95,7 @@ if (typeof pdfjsLib !== 'undefined') {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  state.isIndia = detectIndia();
   loadState();
   updateUsageUI();
   renderRecentChats();
@@ -88,6 +104,8 @@ document.addEventListener('DOMContentLoaded', () => {
   setupInputListener();
   updateQuizButton();
   updateImageAttachOption();
+  initIndiaUI();
+  checkAdminAccess();
   if (IS_AMAZON_DEVICE) {
     var proBtn = document.querySelector('.btn-upgrade');
     if (proBtn) proBtn.style.display = 'none';
@@ -109,8 +127,10 @@ function loadState() {
       state.chatHistory = parsed.chatHistory || [];
       state.settings = { ...state.settings, ...(parsed.settings || {}) };
       state.isPro = parsed.isPro || false;
+      state.langMode = parsed.langMode || 'en';
     }
   } catch (e) {}
+  if (isTrialActive()) state.isPro = true;
 }
 
 function saveState() {
@@ -121,8 +141,133 @@ function saveState() {
       chatHistory: state.chatHistory.slice(0, limit),
       settings: state.settings,
       isPro: state.isPro,
+      langMode: state.langMode,
     }));
   } catch (e) {}
+}
+
+// ============================================================
+// TRIAL SYSTEM
+// ============================================================
+function getTrialKey() {
+  if (state.currentUserId) return 'divi-trial-' + state.currentUserId;
+  return null;
+}
+
+function startTrial() {
+  const key = getTrialKey();
+  if (!key) return;
+  try {
+    const existing = localStorage.getItem(key);
+    if (existing) return;
+    localStorage.setItem(key, JSON.stringify({ startDate: new Date().toISOString().slice(0, 10), used: true }));
+  } catch(e) {}
+}
+
+function isTrialActive() {
+  const key = getTrialKey();
+  if (!key) return false;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    if (!data.startDate) return false;
+    const start = new Date(data.startDate);
+    const now = new Date();
+    const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+    return diffDays < TRIAL_DAYS;
+  } catch(e) { return false; }
+}
+
+function getTrialDaysLeft() {
+  const key = getTrialKey();
+  if (!key) return 0;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return 0;
+    const data = JSON.parse(raw);
+    if (!data.startDate) return 0;
+    const start = new Date(data.startDate);
+    const now = new Date();
+    const diffDays = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+    return Math.max(0, TRIAL_DAYS - diffDays);
+  } catch(e) { return 0; }
+}
+
+function hasUsedTrial() {
+  const key = getTrialKey();
+  if (!key) return false;
+  try {
+    const raw = localStorage.getItem(key);
+    return !!raw;
+  } catch(e) { return false; }
+}
+
+// ============================================================
+// INDIA UI
+// ============================================================
+function initIndiaUI() {
+  if (state.isIndia) {
+    var langRow = document.getElementById('lang-toggle-row');
+    if (langRow) langRow.style.display = 'flex';
+    var langToggle = document.getElementById('toggle-lang');
+    if (langToggle) langToggle.classList.toggle('on', state.langMode === 'kn-mix');
+    var proBtn = document.getElementById('sidebar-pro-btn');
+    if (proBtn) proBtn.innerHTML = 'Explore Pro &#183; ₹99/mo';
+    updateClarifyForIndia();
+  }
+}
+
+function toggleLanguageMode(el) {
+  el.classList.toggle('on');
+  state.langMode = el.classList.contains('on') ? 'kn-mix' : 'en';
+  saveState();
+  showToast(state.langMode === 'kn-mix' ? 'ಕನ್ನಡ + English mode' : 'English mode', 'info');
+}
+
+function updateClarifyForIndia() {
+  if (!state.isIndia) return;
+  var step0 = document.querySelector('.clarify-step[data-step="0"] .clarify-options');
+  if (step0) {
+    step0.innerHTML =
+      '<button class="clarify-opt" onclick="selectClarify(0,\'SSLC (10th)\')">SSLC (10th)</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(0,\'1st PUC\')">1st PUC</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(0,\'2nd PUC\')">2nd PUC</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(0,\'Degree\')">Degree (B.Com/BBA/BSc)</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(0,\'Competitive Exam\')">Competitive Exam</button>';
+  }
+  var step1 = document.querySelector('.clarify-step[data-step="1"] .clarify-options');
+  if (step1) {
+    step1.innerHTML =
+      '<button class="clarify-opt" onclick="selectClarify(1,\'Accounts\')">Accounts</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(1,\'Economics\')">Economics</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(1,\'Business Studies\')">Business Studies</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(1,\'Math\')">Math</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(1,\'Science\')">Science</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(1,\'Other\')">Other</button>';
+  }
+  var step2 = document.querySelector('.clarify-step[data-step="2"] .clarify-options');
+  if (step2) {
+    step2.innerHTML =
+      '<button class="clarify-opt" onclick="selectClarify(2,\'Definition\')">Definition</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(2,\'Full Explanation\')">Full Explanation</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(2,\'Formula\')">Formula</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(2,\'PUC/KEA Exam Tips\')">PUC/KEA Exam Tips</button>' +
+      '<button class="clarify-opt" onclick="selectClarify(2,\'Example\')">Example</button>';
+  }
+}
+
+function checkAdminAccess() {
+  try {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('admin') === ADMIN_SECRET) {
+      setTimeout(openAdminPanel, 500);
+    }
+    var proCode = params.get('activate');
+    if (proCode) {
+      setTimeout(function() { activateProCode(proCode); }, 800);
+    }
+  } catch(e) {}
 }
 
 // ============================================================
@@ -169,10 +314,23 @@ function restoreSettings() {
 // USAGE UI
 // ============================================================
 function updateUsageUI() {
+  var badge = document.getElementById('usage-badge');
+  var planBadge = document.getElementById('plan-badge');
   if (state.isPro) {
-    document.getElementById('usage-badge').textContent = 'Pro';
-    document.getElementById('msg-count').textContent = 'Unlimited';
-    document.getElementById('msg-progress').style.width = '0%';
+    var trialLeft = getTrialDaysLeft();
+    if (isTrialActive() && trialLeft > 0) {
+      badge.textContent = 'Pro Trial · ' + trialLeft + 'd left';
+      if (planBadge) planBadge.textContent = 'TRIAL';
+      var count = getDailyMsgCount();
+      document.getElementById('msg-count').textContent = count + ' / ' + TRIAL_DAILY_MSG_LIMIT;
+      var pct = Math.min((count / TRIAL_DAILY_MSG_LIMIT) * 100, 100);
+      document.getElementById('msg-progress').style.width = pct + '%';
+    } else {
+      badge.textContent = 'Pro';
+      if (planBadge) planBadge.textContent = 'PRO';
+      document.getElementById('msg-count').textContent = 'Unlimited';
+      document.getElementById('msg-progress').style.width = '0%';
+    }
     return;
   }
   let count;
@@ -181,10 +339,11 @@ function updateUsageUI() {
   } else {
     count = getDailyMsgCount();
   }
-  document.getElementById('usage-badge').textContent = `${count} / ${FREE_MSG_LIMIT} msgs`;
-  document.getElementById('msg-count').textContent = `${count} / ${FREE_MSG_LIMIT}`;
+  badge.textContent = count + ' / ' + FREE_MSG_LIMIT + ' msgs';
+  document.getElementById('msg-count').textContent = count + ' / ' + FREE_MSG_LIMIT;
   const pct = Math.min((count / FREE_MSG_LIMIT) * 100, 100);
   document.getElementById('msg-progress').style.width = pct + '%';
+  if (planBadge) planBadge.textContent = 'FREE';
 }
 
 // ============================================================
@@ -618,10 +777,19 @@ function sendMessage() {
         showToast("You've reached the free limit. Visit divi-mind.vercel.app on your browser for unlimited access.", 'warning');
         return;
       }
+      if (state.isIndia && !hasUsedTrial()) {
+        showToast('Sign up for a free 7-day Pro trial!', 'info');
+        openSignUpForm();
+        return;
+      }
       showToast('Create a free DIVI Account to continue', 'warning');
       openSignUpForm();
       return;
     }
+  } else if (isTrialActive() && getDailyMsgCount() >= TRIAL_DAILY_MSG_LIMIT) {
+    showToast('Daily trial limit reached (' + TRIAL_DAILY_MSG_LIMIT + ' msgs). Upgrade for unlimited!', 'warning');
+    openUpgradeModal();
+    return;
   } else if (!state.isPro && getDailyMsgCount() >= FREE_MSG_LIMIT) {
     openUpgradeModal();
     return;
@@ -667,7 +835,7 @@ async function processUserMessage(text, clarifyContext) {
   if (state.isGuest) {
     const gt = parseInt(localStorage.getItem('divi-guest-msgs') || '0') + 1;
     localStorage.setItem('divi-guest-msgs', gt.toString());
-  } else if (!state.isPro) {
+  } else if (!state.isPro || isTrialActive()) {
     incrementDailyMsgCount();
   }
   updateUsageUI();
@@ -763,7 +931,14 @@ function buildSystemPrompt(clarifyContext, lastUserMsg) {
   const hasDocument = state.pdfDoc && state.pdfPageTexts;
   const includePdf = shouldIncludePdfContext(lastUserMsg || '');
 
-  let prompt = `You are DIVI Mind, an AI tutor. Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual.`;
+  let prompt;
+  if (state.isIndia && state.langMode === 'kn-mix') {
+    prompt = `You are DIVI Mind, an AI tutor for Indian students in Karnataka. Use Indian context: ₹ for currency, Indian examples, Indian exam patterns. Reference PUC, B.Com, KEA, KPSC exam styles. Use relatable Indian examples (₹ for money, Indian companies for business, Indian geography). Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual. IMPORTANT: Mix Kannada terms in Kannada script where relevant. For example: ಲಾಭ (profit), ನಷ್ಟ (loss), ಬಡ್ಡಿ (interest), ವೆಚ್ಚ (cost), ಮಾರಾಟ (sales), ಉತ್ಪನ್ನ (production). Use Kannada script for key terms alongside English explanations.`;
+  } else if (state.isIndia) {
+    prompt = `You are DIVI Mind, an AI tutor for Indian students. Use Indian context: ₹ for currency, Indian examples, Indian exam patterns. For Karnataka students: reference PUC, B.Com, KEA, KPSC exam styles. Use relatable Indian examples (₹ for money problems, Indian companies for business, Indian geography for science). Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual.`;
+  } else {
+    prompt = `You are DIVI Mind, an AI tutor. Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual.`;
+  }
 
   if (hasDocument && includePdf) {
     const pageEntries = Object.entries(state.pdfPageTexts)
@@ -1067,16 +1242,128 @@ function openUpgradeModal() {
     showToast("You've reached the free limit. Visit divi-mind.vercel.app on your browser for unlimited access.", 'warning');
     return;
   }
-  document.getElementById('upgrade-modal').classList.add('open');
+  if (state.isIndia) {
+    document.getElementById('india-upgrade-modal').classList.add('open');
+  } else {
+    document.getElementById('upgrade-modal').classList.add('open');
+  }
 }
 
 function closeUpgradeModal() {
   document.getElementById('upgrade-modal').classList.remove('open');
 }
 
+function closeIndiaUpgradeModal() {
+  document.getElementById('india-upgrade-modal').classList.remove('open');
+}
+
 function upgradePro() {
   if (IS_AMAZON_DEVICE) return;
   window.open(LEMON_SQUEEZY_URL, '_blank');
+}
+
+// ============================================================
+// PRO CODE ACTIVATION
+// ============================================================
+function openProCodeModal() {
+  closeIndiaUpgradeModal();
+  document.getElementById('procode-modal').classList.add('open');
+  var input = document.getElementById('procode-input');
+  if (input) { input.value = ''; input.focus(); }
+}
+
+function closeProCodeModal() {
+  document.getElementById('procode-modal').classList.remove('open');
+}
+
+function submitProCode() {
+  var input = document.getElementById('procode-input');
+  var code = (input.value || '').trim().toUpperCase();
+  if (!code) {
+    showToast('Please enter a Pro code', 'error');
+    return;
+  }
+  activateProCode(code);
+}
+
+function activateProCode(code) {
+  code = code.trim().toUpperCase();
+  if (/^DIVI-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(code)) {
+    state.isPro = true;
+    saveState();
+    updateUsageUI();
+    updateImageAttachOption();
+    closeProCodeModal();
+    showToast('Pro activated! Enjoy unlimited access', 'success');
+    var planBadge = document.getElementById('plan-badge');
+    if (planBadge) planBadge.textContent = 'PRO';
+    try {
+      var used = JSON.parse(localStorage.getItem('divi-pro-codes') || '[]');
+      used.push({ code: code, activatedAt: new Date().toISOString() });
+      localStorage.setItem('divi-pro-codes', JSON.stringify(used));
+    } catch(e) {}
+  } else {
+    showToast('Invalid Pro code format', 'error');
+  }
+}
+
+// ============================================================
+// ADMIN PANEL
+// ============================================================
+function openAdminPanel() {
+  document.getElementById('admin-modal').classList.add('open');
+  renderAdminCodes();
+}
+
+function closeAdminPanel() {
+  document.getElementById('admin-modal').classList.remove('open');
+}
+
+function generateAdminCode() {
+  var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  var code = 'DIVI-';
+  for (var i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+  code += '-';
+  for (var i = 0; i < 4; i++) code += chars.charAt(Math.floor(Math.random() * chars.length));
+
+  var email = (document.getElementById('admin-email').value || '').trim();
+  try {
+    var codes = JSON.parse(localStorage.getItem('divi-admin-codes') || '[]');
+    codes.unshift({ code: code, email: email, created: new Date().toISOString() });
+    localStorage.setItem('divi-admin-codes', JSON.stringify(codes));
+  } catch(e) {}
+
+  var result = document.getElementById('admin-code-result');
+  document.getElementById('admin-generated-code').textContent = code;
+  result.style.display = 'block';
+  renderAdminCodes();
+}
+
+function copyAdminCode() {
+  var code = document.getElementById('admin-generated-code').textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(code).then(function() {
+      showToast('Code copied!', 'success');
+    });
+  } else {
+    showToast(code, 'info');
+  }
+}
+
+function renderAdminCodes() {
+  var list = document.getElementById('admin-codes-list');
+  if (!list) return;
+  try {
+    var codes = JSON.parse(localStorage.getItem('divi-admin-codes') || '[]');
+    if (codes.length === 0) {
+      list.innerHTML = '<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px">No codes generated yet</div>';
+      return;
+    }
+    list.innerHTML = '<div style="font-size:10px;font-weight:600;color:var(--text-muted);font-family:var(--font-mono);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Generated Codes</div>' +
+      codes.slice(0, 20).map(function(c) {
+        return '<div class="admin-code-item"><div><span class="code-text">' + c.code + '</span><br><span class="code-email">' + (c.email || 'No email') + '</span></div><div style="font-size:10px;color:var(--text-muted)">' + new Date(c.created).toLocaleDateString() + '</div></div>';
+      }).join('');
+  } catch(e) { list.innerHTML = ''; }
 }
 
 // ============================================================
@@ -1398,6 +1685,14 @@ function setAuthUI(user) {
   state.currentUserId = user.id;
   state.isGuest = false;
   localStorage.removeItem('divi-guest-msgs');
+
+  if (state.isIndia && !hasUsedTrial()) {
+    startTrial();
+    state.isPro = true;
+    showToast('7-day Pro trial started! Enjoy all features', 'success');
+  } else if (isTrialActive()) {
+    state.isPro = true;
+  }
 
   const userKey = 'divi-mind-' + user.id;
   const existing = localStorage.getItem(userKey);
