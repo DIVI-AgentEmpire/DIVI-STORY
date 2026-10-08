@@ -14,6 +14,18 @@ const TRIAL_DAYS = 7;
 const TRIAL_DAILY_MSG_LIMIT = 50;
 const ADMIN_SECRET = 'divi2024';
 
+const MATH_VERIFY_PROMPT = `CRITICAL — CALCULATION ACCURACY:
+For ALL numerical calculations (depreciation, interest, profit/loss, ratios, percentages):
+1. Show each step with the full arithmetic.
+2. Double-check every multiplication and subtraction before writing the next step.
+3. Reducing-balance (WDV) depreciation: apply the rate to the WRITTEN-DOWN VALUE at the START of each year, NOT the original cost. Year-1 WDV = Cost; Year-2 WDV = Cost minus Year-1 depreciation; and so on.
+4. Straight-line depreciation: Annual charge = (Cost − Scrap Value) / Useful Life, or rate × (Cost − Scrap Value).
+5. Never round intermediate steps; round only the final answer if the question says so.
+6. After finishing, re-verify the final figure by adding all yearly charges to confirm they reconcile with the total depreciation.`;
+
+const KANNADA_GLOSSARY = `Use ONLY these standard Karnataka PUC / B.Com Kannada-medium textbook terms (do NOT use uncommon alternatives):
+Accountancy=ಲೆಕ್ಕಶಾಸ್ತ್ರ, Depreciation=ಸವಕಳಿ (NOT ಮೌಲ್ಯಹ್ರಾಸ), Straight Line Method=ಸ್ಥಿರ ಕಂತು ವಿಧಾನ, Reducing Balance/WDV Method=ಇಳಿಕೆ ಬಾಕಿ ವಿಧಾನ, Journal=ಜರ್ನಲ್/ದಿನಚರಿ, Ledger=ಖಾತೆ ಪುಸ್ತಕ, Trial Balance=ಪರಿಶೀಲನಾ ಪಟ್ಟಿ, Balance Sheet=ಆಯ-ವ್ಯಯ ಪಟ್ಟಿ, Trading Account=ವ್ಯಾಪಾರ ಖಾತೆ, P&L Account=ಲಾಭ-ನಷ್ಟ ಖಾತೆ, Capital=ಬಂಡವಾಳ, Liability=ಹೊಣೆ, Asset=ಆಸ್ತಿ, Revenue=ಆದಾಯ, Debit=ನಾಮೆ, Credit=ಜಮೆ, Account=ಖಾತೆ, Tax=ತೆರಿಗೆ, Dividend=ಲಾಭಾಂಶ, Goodwill=ಸದ್ಭಾವನೆ, Stock=ಸರಕು ದಾಸ್ತಾನು, Debtors=ಸಾಲಗಾರರು, Creditors=ಸಾಲದಾತರು, Purchases=ಖರೀದಿ, Sales=ಮಾರಾಟ, Partnership=ಪಾಲುದಾರಿಕೆ, Share=ಷೇರು, Debenture=ಋಣಪತ್ರ, Bill of Exchange=ವಿನಿಮಯ ಪತ್ರ, Promissory Note=ವಚನ ಪತ್ರ, Interest=ಬಡ್ಡಿ, Profit=ಲಾಭ, Loss=ನಷ್ಟ, Cost=ವೆಚ್ಚ, Salary=ಸಂಬಳ, Commission=ದಲ್ಲಾಳಿ, Rent=ಬಾಡಿಗೆ, Insurance=ವಿಮೆ, Discount=ರಿಯಾಯಿತಿ, Outstanding=ಬಾಕಿ ಇರುವ, Prepaid=ಮುಂಗಡ ಪಾವತಿ, Reserve=ಮೀಸಲು, Fund=ನಿಧಿ, Cash Book=ನಗದು ಪುಸ್ತಕ, Receipt=ಸ್ವೀಕೃತಿ, Payment=ಪಾವತಿ, Demand=ಬೇಡಿಕೆ, Supply=ಪೂರೈಕೆ, Price=ಬೆಲೆ, Market=ಮಾರುಕಟ್ಟೆ, Inflation=ಹಣದುಬ್ಬರ, National Income=ರಾಷ್ಟ್ರೀಯ ಆದಾಯ, Budget=ಆಯವ್ಯಯ, Monopoly=ಏಕಸ್ವಾಮ್ಯ, Elasticity=ಸ್ಥಿತಿಸ್ಥಾಪಕತ್ವ, Equilibrium=ಸಮತೋಲನ, Utility=ಉಪಯುಕ್ತತೆ, Management=ನಿರ್ವಹಣೆ, Planning=ಯೋಜನೆ, Controlling=ನಿಯಂತ್ರಣ, Finance=ಹಣಕಾಸು, Written Down Value=ಬರೆದಿಳಿಸಿದ ಮೌಲ್ಯ, Scrap Value=ಉಳಿಕೆ ಮೌಲ್ಯ, Useful Life=ಉಪಯುಕ್ತ ಜೀವಿತಾವಧಿ, Bank Reconciliation=ಬ್ಯಾಂಕ್ ಸಮನ್ವಯ, Suspense Account=ಅನಾಮತ್ತು ಖಾತೆ, Rectification=ತಿದ್ದುಪಡಿ.`;
+
 function detectIndia() {
   try {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -211,7 +223,7 @@ function initIndiaUI() {
     var langRow = document.getElementById('lang-toggle-row');
     if (langRow) langRow.style.display = 'flex';
     var langToggle = document.getElementById('toggle-lang');
-    if (langToggle) langToggle.classList.toggle('on', state.langMode === 'kn-mix');
+    updateLangToggleUI(langToggle);
     var proBtn = document.getElementById('sidebar-pro-btn');
     if (proBtn) proBtn.innerHTML = 'Explore Pro &#183; ₹99/mo';
     updateClarifyForIndia();
@@ -219,10 +231,31 @@ function initIndiaUI() {
 }
 
 function toggleLanguageMode(el) {
-  el.classList.toggle('on');
-  state.langMode = el.classList.contains('on') ? 'kn-mix' : 'en';
+  if (state.langMode === 'en') {
+    state.langMode = 'kn-mix';
+  } else if (state.langMode === 'kn-mix') {
+    state.langMode = 'kn';
+  } else {
+    state.langMode = 'en';
+  }
+  updateLangToggleUI(el);
   saveState();
-  showToast(state.langMode === 'kn-mix' ? 'ಕನ್ನಡ + English mode' : 'English mode', 'info');
+  var labels = { en: 'English mode', 'kn-mix': 'ಕನ್ನಡ + English mode', kn: 'ಪೂರ್ಣ ಕನ್ನಡ mode' };
+  showToast(labels[state.langMode], 'info');
+}
+
+function updateLangToggleUI(toggleEl) {
+  var label = document.getElementById('lang-toggle-label');
+  if (state.langMode === 'en') {
+    if (toggleEl) toggleEl.classList.remove('on');
+    if (label) label.textContent = 'ಕನ್ನಡ + English';
+  } else if (state.langMode === 'kn-mix') {
+    if (toggleEl) toggleEl.classList.add('on');
+    if (label) label.textContent = 'ಕನ್ನಡ + English ✔';
+  } else {
+    if (toggleEl) toggleEl.classList.add('on');
+    if (label) label.textContent = 'ಪೂರ್ಣ ಕನ್ನಡ ✔';
+  }
 }
 
 function updateClarifyForIndia() {
@@ -932,13 +965,17 @@ function buildSystemPrompt(clarifyContext, lastUserMsg) {
   const includePdf = shouldIncludePdfContext(lastUserMsg || '');
 
   let prompt;
-  if (state.isIndia && state.langMode === 'kn-mix') {
-    prompt = `You are DIVI Mind, an AI tutor for Indian students in Karnataka. Use Indian context: ₹ for currency, Indian examples, Indian exam patterns. Reference PUC, B.Com, KEA, KPSC exam styles. Use relatable Indian examples (₹ for money, Indian companies for business, Indian geography). Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual. IMPORTANT: Mix Kannada terms in Kannada script where relevant. For example: ಲಾಭ (profit), ನಷ್ಟ (loss), ಬಡ್ಡಿ (interest), ವೆಚ್ಚ (cost), ಮಾರಾಟ (sales), ಉತ್ಪನ್ನ (production). Use Kannada script for key terms alongside English explanations.`;
+  if (state.isIndia && state.langMode === 'kn') {
+    prompt = `ನೀವು DIVI Mind, ಕರ್ನಾಟಕದ ವಿದ್ಯಾರ್ಥಿಗಳಿಗಾಗಿ AI ಶಿಕ್ಷಕ. ಪೂರ್ಣವಾಗಿ ಕನ್ನಡದಲ್ಲಿ ಉತ್ತರಿಸಿ. ₹ ಹಣ, ಭಾರತೀಯ ಉದಾಹರಣೆಗಳು, PUC/B.Com/KEA/KPSC ಪರೀಕ್ಷಾ ಮಾದರಿ. ಕೋಷ್ಟಕ, ಪಟ್ಟಿ, emoji ಬಳಸಿ. LaTeX ಬೇಡ — ಸಾಮಾನ್ಯ ಪಠ್ಯ ಗಣಿತ ಮಾತ್ರ. ಸಂಕ್ಷಿಪ್ತ ಮತ್ತು ದೃಶ್ಯ ಉತ್ತರಗಳನ್ನು ಕೊಡಿ. ಇಂಗ್ಲಿಷ್ ಪಾರಿಭಾಷಿಕ ಪದವನ್ನು ಬ್ರಾಕೆಟ್‌ನಲ್ಲಿ ಕೊಡಿ — ಉದಾ: ಸವಕಳಿ (Depreciation), ಲಾಭ (Profit). Answer FULLY in Kannada script. Use Karnataka PUC/B.Com Kannada-medium textbook terminology throughout. Put the English equivalent in brackets after each Kannada term for student reference.\n` + KANNADA_GLOSSARY;
+  } else if (state.isIndia && state.langMode === 'kn-mix') {
+    prompt = `You are DIVI Mind, an AI tutor for Indian students in Karnataka. Use Indian context: ₹ for currency, Indian examples, Indian exam patterns. Reference PUC, B.Com, KEA, KPSC exam styles. Use relatable Indian examples (₹ for money, Indian companies for business, Indian geography). Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual. IMPORTANT: Mix Kannada terms in Kannada script where relevant, using standard Karnataka textbook terminology. For example: ಲಾಭ (profit), ನಷ್ಟ (loss), ಬಡ್ಡಿ (interest), ವೆಚ್ಚ (cost), ಮಾರಾಟ (sales), ಸವಕಳಿ (depreciation). Use Kannada script for key terms alongside English explanations.\n` + KANNADA_GLOSSARY;
   } else if (state.isIndia) {
     prompt = `You are DIVI Mind, an AI tutor for Indian students. Use Indian context: ₹ for currency, Indian examples, Indian exam patterns. For Karnataka students: reference PUC, B.Com, KEA, KPSC exam styles. Use relatable Indian examples (₹ for money problems, Indian companies for business, Indian geography for science). Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual.`;
   } else {
     prompt = `You are DIVI Mind, an AI tutor. Use tables, lists, emoji markers. No LaTeX — plain text math. Keep answers brief and visual.`;
   }
+
+  prompt += '\n' + MATH_VERIFY_PROMPT;
 
   if (hasDocument && includePdf) {
     const pageEntries = Object.entries(state.pdfPageTexts)
@@ -1093,6 +1130,15 @@ function cleanLatexInner(expr) {
   return s.trim();
 }
 
+function renderInlineMarkdown(text) {
+  var s = escapeHtml(text);
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  return s;
+}
+
 function renderMarkdown(text) {
   text = cleanLatex(text);
 
@@ -1124,13 +1170,13 @@ function renderMarkdown(text) {
     let tableHtml = '<div class="table-wrap"><table>';
     if (headerRow) {
       const headers = parseRow(headerRow);
-      tableHtml += '<thead><tr>' + headers.map(h => `<th>${escapeHtml(h)}</th>`).join('') + '</tr></thead>';
+      tableHtml += '<thead><tr>' + headers.map(h => `<th>${renderInlineMarkdown(h)}</th>`).join('') + '</tr></thead>';
     }
     tableHtml += '<tbody>';
     dataRows.forEach(row => {
       if (isSeparator(row)) return;
       const cells = parseRow(row);
-      tableHtml += '<tr>' + cells.map(c => `<td>${escapeHtml(c)}</td>`).join('') + '</tr>';
+      tableHtml += '<tr>' + cells.map(c => `<td>${renderInlineMarkdown(c)}</td>`).join('') + '</tr>';
     });
     tableHtml += '</tbody></table></div>';
 
