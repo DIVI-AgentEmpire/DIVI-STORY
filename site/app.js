@@ -333,7 +333,7 @@ function updateUsageUI() {
     }
     return;
   }
-  let count;
+  var count;
   if (state.isGuest) {
     count = parseInt(localStorage.getItem('divi-guest-msgs') || '0');
   } else {
@@ -341,7 +341,7 @@ function updateUsageUI() {
   }
   badge.textContent = count + ' / ' + FREE_MSG_LIMIT + ' msgs';
   document.getElementById('msg-count').textContent = count + ' / ' + FREE_MSG_LIMIT;
-  const pct = Math.min((count / FREE_MSG_LIMIT) * 100, 100);
+  var pct = Math.min((count / FREE_MSG_LIMIT) * 100, 100);
   document.getElementById('msg-progress').style.width = pct + '%';
   if (planBadge) planBadge.textContent = 'FREE';
 }
@@ -1536,7 +1536,12 @@ let supabaseClient = null;
 function getSupabase() {
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
   if (!supabaseClient && typeof supabase !== 'undefined') {
-    supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    try {
+      supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    } catch (e) {
+      console.error('Supabase init failed:', e);
+      return null;
+    }
   }
   return supabaseClient;
 }
@@ -1745,19 +1750,23 @@ function handleAuthAction() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  const sb = getSupabase();
-  if (!sb) return;
-  sb.auth.getSession().then(({ data: { session } }) => {
-    if (session?.user) {
-      setAuthUI(session.user);
-    }
-  });
-  sb.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_IN' && session?.user) {
-      setAuthUI(session.user);
-    } else if (event === 'SIGNED_OUT') {
-      state.currentUserId = null;
-      state.isGuest = true;
-    }
-  });
+  try {
+    const sb = getSupabase();
+    if (!sb) return;
+    sb.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthUI(session.user);
+      }
+    }).catch(e => console.error('getSession failed:', e));
+    sb.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        setAuthUI(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        state.currentUserId = null;
+        state.isGuest = true;
+      }
+    });
+  } catch (e) {
+    console.error('Auth init failed:', e);
+  }
 });
