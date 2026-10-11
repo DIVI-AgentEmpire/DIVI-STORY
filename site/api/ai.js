@@ -92,38 +92,40 @@ function isFactualQuestion(userMsg) {
   return false;
 }
 
-// Fallback chain for grounding:
-// 1. Gemini + Google Search (best: real-time web data)
-// 2. Gemini plain (newer training data than Groq)
-// 3. null (caller uses Groq compound-beta with web search, or plain Groq)
-async function tryGeminiGrounding(geminiKey, gemModel, userMsg) {
+async function searchWeb(query) {
   try {
-    var result = await geminiGenerate(
-      geminiKey, gemModel,
-      [{ role: 'user', parts: [{ text: userMsg }] }],
-      [{ google_search: {} }]
-    );
-    var text = extractGeminiText(result);
-    if (text) {
-      return { text: text, result: result, source: 'gemini-search', grounded: hasGroundingSupport(result) };
+    var url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_html=1&skip_disambig=1';
+    var r = await fetch(url, { headers: { 'User-Agent': 'DIVI-Mind/1.0' } });
+    if (!r.ok) return null;
+    var data = await r.json();
+    var facts = [];
+    if (data.AbstractText) facts.push(data.AbstractText);
+    if (data.Answer) facts.push(data.Answer);
+    if (data.RelatedTopics) {
+      for (var i = 0; i < Math.min(data.RelatedTopics.length, 5); i++) {
+        if (data.RelatedTopics[i] && data.RelatedTopics[i].Text) facts.push(data.RelatedTopics[i].Text);
+      }
     }
+    if (facts.length > 0) return facts.join('\n');
   } catch (e) {
-    console.warn('Gemini+Search failed:', e.status || '', e.message.slice(0, 100));
+    console.warn('DDG API failed:', e.message.slice(0, 80));
   }
-
   try {
-    var plainResult = await geminiGenerate(
-      geminiKey, gemModel,
-      [{ role: 'user', parts: [{ text: userMsg }] }]
-    );
-    var plainText = extractGeminiText(plainResult);
-    if (plainText) {
-      return { text: plainText, result: plainResult, source: 'gemini-plain', grounded: false };
+    var htmlUrl = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query);
+    var r2 = await fetch(htmlUrl, { headers: { 'User-Agent': 'DIVI-Mind/1.0' } });
+    if (!r2.ok) return null;
+    var html = await r2.text();
+    var snippets = [];
+    var re = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+    var m;
+    while ((m = re.exec(html)) !== null && snippets.length < 5) {
+      var text = m[1].replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
+      if (text.length > 30) snippets.push(text);
     }
+    if (snippets.length > 0) return snippets.join('\n');
   } catch (e2) {
-    console.warn('Gemini plain also failed:', e2.status || '', e2.message.slice(0, 100));
+    console.warn('DDG HTML failed:', e2.message.slice(0, 80));
   }
-
   return null;
 }
 
@@ -156,24 +158,13 @@ module.exports = async function handler(req, res) {
       var reply;
 
       if (factual) {
-        // Factual/current-affairs → Groq compound (has built-in web search)
-        var searchModels = ['groq/compound', 'compound-beta'];
-        var searchOk = false;
-        for (var si = 0; si < searchModels.length && !searchOk; si++) {
-          try {
-            reply = await callGroq(
-              groqKey,
-              [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
-              2048, 0.3, searchModels[si]
-            );
-            debug.path = 'groq-search';
-            debug.searchModel = searchModels[si];
-            searchOk = true;
-          } catch (compoundErr) {
-            console.warn('Groq ' + searchModels[si] + ' failed:', compoundErr.message.slice(0, 100));
-          }
-        }
-        if (!searchOk) {
+        // Factual/current-affairs → web search + Groq
+        var webFacts = await searchWeb(userMsg);
+        if (webFacts) {
+          var factSP = systemPrompt + '\n\n[VERIFIED WEB SEARCH RESULTS — These are CURRENT and CORRECT. Base your answer on these facts. Do NOT contradict them.]\n' + webFacts;
+          reply = await callGroq(groqKey, [{ role: 'system', content: factSP }, { role: 'user', content: userMsg }], 2048, 0.3);
+          debug.path = 'web-search';
+        } else {
           var groqMsgs = [{ role: 'system', content: systemPrompt }].concat(messages);
           reply = await callGroq(groqKey, groqMsgs, 2048, 0.7);
           debug.path = 'groq-only';
@@ -246,20 +237,12 @@ module.exports = async function handler(req, res) {
     if (action === 'test') {
       var testResults = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
 
-      // Test Groq compound (web search) — try GA name then beta name
-      var searchModelsTest = ['groq/compound', 'compound-beta'];
-      for (var ti = 0; ti < searchModelsTest.length; ti++) {
-        try {
-          var searchReply = await callGroq(
-            groqKey,
-            [{ role: 'user', content: 'Who is the current Chief Minister of Karnataka?' }],
-            512, 0.3, searchModelsTest[ti]
-          );
-          testResults.steps.push({ step: 'groqSearch', ok: true, model: searchModelsTest[ti], text: searchReply.slice(0, 300) });
-          break;
-        } catch (e5) {
-          testResults.steps.push({ step: 'groqSearch', ok: false, model: searchModelsTest[ti], error: e5.message.slice(0, 200) });
-        }
+      // Test web search (DuckDuckGo)
+      try {
+        var webResult = await searchWeb('Who is the current Chief Minister of Karnataka?');
+        testResults.steps.push({ step: 'webSearch', ok: !!webResult, text: webResult ? webResult.slice(0, 400) : 'No results' });
+      } catch (e5) {
+        testResults.steps.push({ step: 'webSearch', ok: false, error: e5.message.slice(0, 200) });
       }
 
       if (!geminiKey) return res.json(testResults);
