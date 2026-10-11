@@ -276,7 +276,38 @@ module.exports = async function handler(req, res) {
       return res.json({ reply: quizReply });
     }
 
-    return res.status(400).json({ error: 'Invalid action. Use "chat" or "quiz".' });
+    // ── TEST: diagnostic endpoint ──
+    if (action === 'test') {
+      var testResults = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
+      if (!geminiKey) return res.json(testResults);
+      // Step 1: pick model
+      try {
+        var tm2 = await pickFlashModel(geminiKey);
+        testResults.steps.push({ step: 'pickModel', ok: true, model: tm2 });
+      } catch (e2) {
+        testResults.steps.push({ step: 'pickModel', ok: false, error: e2.message });
+        return res.json(testResults);
+      }
+      // Step 2: plain generate (no search)
+      try {
+        var pr2 = await geminiGenerate(geminiKey, tm2, [{ role: 'user', parts: [{ text: 'Say hello in one word' }] }]);
+        testResults.steps.push({ step: 'plainGenerate', ok: true, text: extractGeminiText(pr2).slice(0, 100) });
+      } catch (e3) {
+        testResults.steps.push({ step: 'plainGenerate', ok: false, error: e3.message.slice(0, 200) });
+      }
+      // Step 3: grounded generate (with Google Search)
+      try {
+        var gr2 = await geminiGenerate(geminiKey, tm2, [{ role: 'user', parts: [{ text: 'Who is the current Chief Minister of Karnataka?' }] }], [{ google_search: {} }]);
+        var gt2 = extractGeminiText(gr2);
+        var hasChunks2 = hasGroundingSupport(gr2);
+        testResults.steps.push({ step: 'groundedGenerate', ok: true, text: gt2.slice(0, 300), hasGroundingChunks: hasChunks2 });
+      } catch (e4) {
+        testResults.steps.push({ step: 'groundedGenerate', ok: false, error: e4.message.slice(0, 300) });
+      }
+      return res.json(testResults);
+    }
+
+    return res.status(400).json({ error: 'Invalid action. Use "chat", "quiz", or "test".' });
   } catch (err) {
     console.error('AI API error:', err.message);
     return res.status(502).json({ error: err.message });
