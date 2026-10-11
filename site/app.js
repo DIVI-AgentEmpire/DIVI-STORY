@@ -2,9 +2,7 @@
 // CONFIG
 // ============================================================
 const LEMON_SQUEEZY_URL = 'https://divimind.lemonsqueezy.com/checkout/buy/1e7009c2-6267-4c2a-a73a-1e3982b7c247';
-const GROQ_API_KEY = ['gsk_AMZP8DQKiQUlUMWH56OrWGdy','b3FYUQSoMrfLwGfTcRn2PtsrvwAE'].join('');
-const GROQ_MODEL = 'openai/gpt-oss-120b';
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const AI_API_URL = '/api/ai';
 const FREE_MSG_LIMIT = 15;
 const FREE_PAGE_LIMIT = 5;
 const FREE_CHAT_HISTORY_LIMIT = 3;
@@ -870,76 +868,8 @@ async function processUserMessage(text, clarifyContext) {
 }
 
 // ============================================================
-// AI CALL
+// AI CALL (server-side pipeline via /api/ai)
 // ============================================================
-async function callGemini(action, payload) {
-  var res = await fetch('/api/gemini', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(Object.assign({ action: action }, payload)),
-  });
-  if (!res.ok) throw new Error('Gemini error ' + res.status);
-  return res.json();
-}
-
-async function groundWithGemini(userMsg) {
-  try {
-    var data = await callGemini('ground', { prompt: userMsg });
-    return data.text || '';
-  } catch (e) {
-    console.warn('Gemini grounding skipped:', e.message);
-    return '';
-  }
-}
-
-async function refineKannada(answer) {
-  try {
-    var data = await callGemini('kannada', { answer: answer });
-    return data.text || answer;
-  } catch (e) {
-    console.warn('Gemini Kannada refinement skipped:', e.message);
-    return answer;
-  }
-}
-
-function needsGrounding(userMsg) {
-  if (state.pdfDoc && shouldIncludePdfContext(userMsg)) return false;
-  if (/^(hi|hello|hey|thanks|thank you|ok|okay|bye|good)\b/i.test(userMsg.trim())) return false;
-  return true;
-}
-
-async function callGroq(messages) {
-  var apiKey = GROQ_API_KEY;
-  if (!apiKey || apiKey.length < 10) throw new Error('API key not configured');
-  var res = await fetch(GROQ_URL, {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + apiKey,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      messages: messages,
-      max_tokens: 2048,
-      temperature: 0.7,
-    }),
-  });
-  if (!res.ok) {
-    var errText = await res.text().catch(function() { return ''; });
-    var errMsg = 'API error ' + res.status;
-    try {
-      var errData = JSON.parse(errText);
-      if (errData.error && errData.error.message) errMsg = errData.error.message;
-    } catch (e) {}
-    throw new Error(errMsg);
-  }
-  var data = await res.json();
-  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-    throw new Error('Invalid response from API');
-  }
-  return data.choices[0].message.content || 'I could not generate a response. Please try again.';
-}
-
 async function callAI(clarifyContext) {
   if (!ensureApiKey()) return;
   showTypingIndicator();
@@ -949,34 +879,41 @@ async function callAI(clarifyContext) {
     : '';
 
   try {
-    var groundedFacts = '';
-    if (needsGrounding(lastUserMsg)) {
-      groundedFacts = await groundWithGemini(lastUserMsg);
-    }
-
     let systemPrompt = buildSystemPrompt(clarifyContext, lastUserMsg);
 
-    if (groundedFacts) {
-      systemPrompt += '\n\n[VERIFIED FACTS from web search — use these for accuracy, cite if relevant]:\n' + groundedFacts;
-    }
-
     const recentHistory = state.conversationHistory.slice(-4);
-    let messages = [
-      { role: 'system', content: systemPrompt },
-      ...recentHistory.map(m => {
-        if (Array.isArray(m.content)) {
-          const textParts = m.content.filter(p => p.type === 'text').map(p => p.text).join('\n');
-          return { role: m.role, content: textParts || m.content };
-        }
-        return { role: m.role, content: m.content };
-      })
-    ];
+    let messages = recentHistory.map(m => {
+      if (Array.isArray(m.content)) {
+        const textParts = m.content.filter(p => p.type === 'text').map(p => p.text).join('\n');
+        return { role: m.role, content: textParts || m.content };
+      }
+      return { role: m.role, content: m.content };
+    });
 
-    var reply = await callGroq(messages);
+    var hasPdfContext = !!(state.pdfDoc && shouldIncludePdfContext(lastUserMsg));
 
-    if (state.langMode === 'kn') {
-      reply = await refineKannada(reply);
+    var res = await fetch(AI_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'chat',
+        systemPrompt: systemPrompt,
+        messages: messages,
+        userMsg: lastUserMsg,
+        langMode: state.langMode || 'en',
+        hasPdfContext: hasPdfContext,
+      }),
+    });
+
+    if (!res.ok) {
+      var errText = await res.text().catch(function() { return ''; });
+      var errMsg = 'AI error ' + res.status;
+      try { var ed = JSON.parse(errText); if (ed.error) errMsg = ed.error; } catch(e) {}
+      throw new Error(errMsg);
     }
+
+    var data = await res.json();
+    var reply = data.reply || 'I could not generate a response. Please try again.';
 
     removeTypingIndicator();
     addMessageToUI('ai', reply);
@@ -1509,27 +1446,20 @@ async function generateQuiz() {
 Make questions in past paper exam style. Ensure only one correct answer per question. Return ONLY the JSON array, no other text.`;
 
   try {
-    const res = await fetch(GROQ_URL, {
+    const res = await fetch(AI_API_URL, {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + GROQ_API_KEY,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: 'Generate 3 MCQ questions from this text:\n\n' + truncated }
-        ],
-        max_tokens: 1500,
-        temperature: 0.5,
+        action: 'quiz',
+        systemPrompt: systemPrompt,
+        userMsg: 'Generate 3 MCQ questions from this text:\n\n' + truncated,
       }),
     });
 
     if (!res.ok) throw new Error('Failed to generate quiz');
 
     const data = await res.json();
-    let content = (data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content) || '';
+    let content = data.reply || '';
 
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error('Invalid quiz format');
