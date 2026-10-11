@@ -8,9 +8,9 @@ var cachedAt = 0;
 async function pickFlashModel(apiKey) {
   if (cachedModel && Date.now() - cachedAt < 86400000) return cachedModel;
   try {
-    var res = await fetch(GEMINI_BASE + '/models?key=' + apiKey);
-    if (!res.ok) return 'gemini-2.5-flash';
-    var data = await res.json();
+    var r = await fetch(GEMINI_BASE + '/models?key=' + apiKey);
+    if (!r.ok) return 'gemini-2.5-flash';
+    var data = await r.json();
     if (!data.models) return 'gemini-2.5-flash';
     var flash = data.models
       .filter(function (m) {
@@ -33,15 +33,17 @@ async function geminiGenerate(apiKey, model, contents, tools, systemInstruction)
   var body = { contents: contents };
   if (tools) body.tools = tools;
   if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
-  var res = await fetch(
+  var r = await fetch(
     GEMINI_BASE + '/models/' + model + ':generateContent?key=' + apiKey,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   );
-  if (!res.ok) {
-    var errText = await res.text().catch(function () { return ''; });
-    throw new Error('Gemini ' + res.status + ': ' + errText.slice(0, 300));
+  if (!r.ok) {
+    var errText = await r.text().catch(function () { return ''; });
+    var err = new Error('Gemini ' + r.status + ': ' + errText.slice(0, 300));
+    err.status = r.status;
+    throw err;
   }
-  return res.json();
+  return r.json();
 }
 
 function extractGeminiText(result) {
@@ -58,18 +60,18 @@ function hasGroundingSupport(result) {
 }
 
 async function callGroq(groqKey, messages, maxTokens, temperature) {
-  var res = await fetch(GROQ_URL, {
+  var r = await fetch(GROQ_URL, {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + groqKey, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: GROQ_MODEL, messages: messages, max_tokens: maxTokens || 2048, temperature: temperature || 0.7 }),
   });
-  if (!res.ok) {
-    var errText = await res.text().catch(function () { return ''; });
-    var errMsg = 'Groq ' + res.status;
+  if (!r.ok) {
+    var errText = await r.text().catch(function () { return ''; });
+    var errMsg = 'Groq ' + r.status;
     try { var e = JSON.parse(errText); if (e.error && e.error.message) errMsg = e.error.message; } catch (x) {}
     throw new Error(errMsg);
   }
-  var data = await res.json();
+  var data = await r.json();
   if (!data.choices || !data.choices[0] || !data.choices[0].message) throw new Error('Invalid Groq response');
   return data.choices[0].message.content || '';
 }
@@ -89,47 +91,53 @@ function isFactualQuestion(userMsg) {
   return false;
 }
 
+// Try Gemini grounding with fallback chain:
+// 1. Gemini + Google Search (best: real-time web data)
+// 2. Gemini plain (fallback: training data, no web, but more recent than Groq)
+// 3. null (caller falls through to Groq)
+async function tryGeminiGrounding(geminiKey, gemModel, userMsg) {
+  // Step 1: try with Google Search
+  try {
+    var result = await geminiGenerate(
+      geminiKey, gemModel,
+      [{ role: 'user', parts: [{ text: userMsg }] }],
+      [{ google_search: {} }]
+    );
+    var text = extractGeminiText(result);
+    if (text) {
+      return { text: text, result: result, source: 'gemini-search', grounded: hasGroundingSupport(result) };
+    }
+  } catch (e) {
+    console.warn('Gemini+Search failed:', e.status || '', e.message.slice(0, 100));
+    // If 429, try without search
+  }
+
+  // Step 2: try plain Gemini (no Google Search tool — separate/higher quota)
+  try {
+    var plainResult = await geminiGenerate(
+      geminiKey, gemModel,
+      [{ role: 'user', parts: [{ text: userMsg }] }]
+    );
+    var plainText = extractGeminiText(plainResult);
+    if (plainText) {
+      return { text: plainText, result: plainResult, source: 'gemini-plain', grounded: false };
+    }
+  } catch (e2) {
+    console.warn('Gemini plain also failed:', e2.status || '', e2.message.slice(0, 100));
+  }
+
+  return null;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   var groqKey = process.env.GROQ_API_KEY;
   var geminiKey = process.env.GEMINI_API_KEY;
-
-  // ── GET /api/ai?test=1 — diagnostic endpoint ──
-  if (req.method === 'GET' && req.query && req.query.test) {
-    var results = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
-    if (!geminiKey) return res.json(results);
-    // Step 1: pick model
-    try {
-      var tm = await pickFlashModel(geminiKey);
-      results.steps.push({ step: 'pickModel', ok: true, model: tm });
-    } catch (e) {
-      results.steps.push({ step: 'pickModel', ok: false, error: e.message });
-      return res.json(results);
-    }
-    // Step 2: plain generate (no search)
-    try {
-      var pr = await geminiGenerate(geminiKey, tm, [{ role: 'user', parts: [{ text: 'Say hello in one word' }] }]);
-      results.steps.push({ step: 'plainGenerate', ok: true, text: extractGeminiText(pr).slice(0, 100) });
-    } catch (e) {
-      results.steps.push({ step: 'plainGenerate', ok: false, error: e.message.slice(0, 200) });
-    }
-    // Step 3: grounded generate (with Google Search)
-    try {
-      var gr = await geminiGenerate(geminiKey, tm, [{ role: 'user', parts: [{ text: 'Who is the current Chief Minister of Karnataka in 2024?' }] }], [{ google_search: {} }]);
-      var gt = extractGeminiText(gr);
-      var hasChunks = hasGroundingSupport(gr);
-      results.steps.push({ step: 'groundedGenerate', ok: true, text: gt.slice(0, 300), hasGroundingChunks: hasChunks });
-    } catch (e) {
-      results.steps.push({ step: 'groundedGenerate', ok: false, error: e.message.slice(0, 300) });
-    }
-    return res.json(results);
-  }
-
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!groqKey) return res.status(500).json({ error: 'GROQ_API_KEY not set' });
 
   var action = req.body.action;
@@ -145,32 +153,23 @@ module.exports = async function handler(req, res) {
 
       var debug = { path: 'groq-only', geminiModel: null, groundingError: null };
       var groundingFailed = false;
-      var groundedFacts = '';
-      var groundingResult = null;
+      var geminiInfo = null;
       var factual = isFactualQuestion(userMsg);
 
-      // ── Stage 1: Gemini grounding ──
+      // ── Stage 1: Gemini grounding (with fallback chain) ──
       if (geminiKey && shouldGround(userMsg, hasPdfContext)) {
         var gemModel;
         try { gemModel = await pickFlashModel(geminiKey); } catch (e) { gemModel = 'gemini-2.5-flash'; }
         debug.geminiModel = gemModel;
-        try {
-          groundingResult = await geminiGenerate(
-            geminiKey, gemModel,
-            [{ role: 'user', parts: [{ text: userMsg }] }],
-            [{ google_search: {} }]
-          );
-          groundedFacts = extractGeminiText(groundingResult);
-          if (groundedFacts) {
-            debug.path = 'gemini-grounded';
-          } else {
-            debug.path = 'groq-only';
-            debug.groundingError = 'Gemini returned empty text';
-          }
-        } catch (e) {
-          console.warn('Grounding failed:', e.message);
+
+        geminiInfo = await tryGeminiGrounding(geminiKey, gemModel, userMsg);
+
+        if (geminiInfo) {
+          debug.path = geminiInfo.source;
+          if (geminiInfo.grounded) debug.path = 'gemini-grounded';
+        } else {
           groundingFailed = true;
-          debug.groundingError = e.message;
+          debug.groundingError = 'All Gemini calls failed (likely 429 quota)';
           debug.path = 'groq-only';
         }
       } else if (!geminiKey) {
@@ -180,42 +179,24 @@ module.exports = async function handler(req, res) {
       var reply;
 
       // ── Stage 2: Generate answer ──
-      if (factual && groundedFacts && hasGroundingSupport(groundingResult)) {
-        // For factual questions with good grounding, let Gemini answer directly
-        // so Groq can't override the web-searched facts
-        debug.path = 'gemini-direct';
-        var gemModel2;
-        try { gemModel2 = await pickFlashModel(geminiKey); } catch (e) { gemModel2 = 'gemini-2.5-flash'; }
-        try {
-          var directResult = await geminiGenerate(
-            geminiKey, gemModel2,
-            [{ role: 'user', parts: [{ text: userMsg }] }],
-            [{ google_search: {} }],
-            systemPrompt
-          );
-          reply = extractGeminiText(directResult);
-          if (!reply) {
-            // Fallback to Groq with grounded facts if Gemini gives empty answer
-            debug.path = 'gemini-grounded';
-            var fullSP = systemPrompt + '\n\n[VERIFIED FACTS from web search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + groundedFacts;
-            var groqMsgs = [{ role: 'system', content: fullSP }].concat(messages);
-            reply = await callGroq(groqKey, groqMsgs, 2048, 0.4);
-          }
-        } catch (e) {
-          // Gemini direct failed, fall back to Groq with grounded facts
-          console.warn('Gemini direct answer failed, using Groq:', e.message);
-          debug.path = 'gemini-grounded';
-          var fullSP2 = systemPrompt + '\n\n[VERIFIED FACTS from web search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + groundedFacts;
-          var groqMsgs2 = [{ role: 'system', content: fullSP2 }].concat(messages);
-          reply = await callGroq(groqKey, groqMsgs2, 2048, 0.4);
+      if (factual && geminiInfo && (geminiInfo.grounded || geminiInfo.source === 'gemini-plain')) {
+        // Factual question with Gemini data available
+        if (geminiInfo.grounded) {
+          // Best case: web-grounded Gemini answer — use directly
+          debug.path = 'gemini-direct';
+          reply = geminiInfo.text;
+        } else {
+          // Gemini plain (no web search, but newer training data than Groq)
+          debug.path = 'gemini-plain';
+          reply = geminiInfo.text;
         }
-      } else if (groundedFacts) {
-        // Non-factual question but grounding found useful context — feed to Groq with stronger instruction
-        var fullSystemPrompt = systemPrompt + '\n\n[VERIFIED FACTS from web search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + groundedFacts;
+      } else if (geminiInfo && geminiInfo.text) {
+        // Non-factual question with Gemini context — feed to Groq
+        var fullSystemPrompt = systemPrompt + '\n\n[VERIFIED FACTS from search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + geminiInfo.text;
         var groqMessages = [{ role: 'system', content: fullSystemPrompt }].concat(messages);
         reply = await callGroq(groqKey, groqMessages, 2048, 0.5);
       } else {
-        // No grounding — Groq only
+        // No Gemini data — Groq only
         var groqMessages3 = [{ role: 'system', content: systemPrompt }].concat(messages);
         reply = await callGroq(groqKey, groqMessages3, 2048, 0.7);
       }
@@ -257,7 +238,7 @@ module.exports = async function handler(req, res) {
           var knText = extractGeminiText(knResult);
           if (knText) reply = knText;
         } catch (e) {
-          console.warn('Kannada refinement skipped:', e.message);
+          console.warn('Kannada refinement skipped:', e.message.slice(0, 80));
         }
       }
 
@@ -280,27 +261,24 @@ module.exports = async function handler(req, res) {
     if (action === 'test') {
       var testResults = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
       if (!geminiKey) return res.json(testResults);
-      // Step 1: pick model
+      var tm2;
       try {
-        var tm2 = await pickFlashModel(geminiKey);
+        tm2 = await pickFlashModel(geminiKey);
         testResults.steps.push({ step: 'pickModel', ok: true, model: tm2 });
       } catch (e2) {
         testResults.steps.push({ step: 'pickModel', ok: false, error: e2.message });
         return res.json(testResults);
       }
-      // Step 2: plain generate (no search)
       try {
         var pr2 = await geminiGenerate(geminiKey, tm2, [{ role: 'user', parts: [{ text: 'Say hello in one word' }] }]);
         testResults.steps.push({ step: 'plainGenerate', ok: true, text: extractGeminiText(pr2).slice(0, 100) });
       } catch (e3) {
         testResults.steps.push({ step: 'plainGenerate', ok: false, error: e3.message.slice(0, 200) });
       }
-      // Step 3: grounded generate (with Google Search)
       try {
         var gr2 = await geminiGenerate(geminiKey, tm2, [{ role: 'user', parts: [{ text: 'Who is the current Chief Minister of Karnataka?' }] }], [{ google_search: {} }]);
         var gt2 = extractGeminiText(gr2);
-        var hasChunks2 = hasGroundingSupport(gr2);
-        testResults.steps.push({ step: 'groundedGenerate', ok: true, text: gt2.slice(0, 300), hasGroundingChunks: hasChunks2 });
+        testResults.steps.push({ step: 'groundedGenerate', ok: true, text: gt2.slice(0, 300), hasGroundingChunks: hasGroundingSupport(gr2) });
       } catch (e4) {
         testResults.steps.push({ step: 'groundedGenerate', ok: false, error: e4.message.slice(0, 300) });
       }
