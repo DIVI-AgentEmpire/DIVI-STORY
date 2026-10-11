@@ -151,36 +151,12 @@ module.exports = async function handler(req, res) {
 
       var debug = { path: 'groq-only', geminiModel: null, groundingError: null };
       var groundingFailed = false;
-      var geminiInfo = null;
       var factual = isFactualQuestion(userMsg);
-
-      // ── Stage 1: try Gemini grounding ──
-      if (geminiKey && shouldGround(userMsg, hasPdfContext)) {
-        var gemModel;
-        try { gemModel = await pickFlashModel(geminiKey); } catch (e) { gemModel = 'gemini-2.5-flash'; }
-        debug.geminiModel = gemModel;
-        geminiInfo = await tryGeminiGrounding(geminiKey, gemModel, userMsg);
-
-        if (geminiInfo) {
-          debug.path = geminiInfo.grounded ? 'gemini-grounded' : geminiInfo.source;
-        } else {
-          groundingFailed = true;
-          debug.groundingError = 'All Gemini calls failed (likely 429 quota)';
-        }
-      } else if (!geminiKey) {
-        debug.groundingError = 'GEMINI_API_KEY not set';
-      }
 
       var reply;
 
-      // ── Stage 2: generate answer ──
-      if (factual && geminiInfo && (geminiInfo.grounded || geminiInfo.source === 'gemini-plain')) {
-        // Gemini answered a factual question — use its answer directly
-        debug.path = geminiInfo.grounded ? 'gemini-direct' : 'gemini-plain';
-        reply = geminiInfo.text;
-
-      } else if (factual && !geminiInfo) {
-        // Factual question but Gemini unavailable — use Groq compound (has web search)
+      if (factual) {
+        // Factual/current-affairs → Groq compound (has built-in web search)
         var searchModels = ['groq/compound', 'compound-beta'];
         var searchOk = false;
         for (var si = 0; si < searchModels.length && !searchOk; si++) {
@@ -192,7 +168,6 @@ module.exports = async function handler(req, res) {
             );
             debug.path = 'groq-search';
             debug.searchModel = searchModels[si];
-            groundingFailed = false;
             searchOk = true;
           } catch (compoundErr) {
             console.warn('Groq ' + searchModels[si] + ' failed:', compoundErr.message.slice(0, 100));
@@ -205,18 +180,10 @@ module.exports = async function handler(req, res) {
           groundingFailed = true;
         }
 
-      } else if (geminiInfo && geminiInfo.text) {
-        // Non-factual question with Gemini context — feed to Groq
-        var fullSP = systemPrompt + '\n\n[VERIFIED FACTS from search — CORRECT and CURRENT. You MUST use these facts. Do NOT contradict them.]:\n' + geminiInfo.text;
-        var groqMessages = [{ role: 'system', content: fullSP }].concat(messages);
-        reply = await callGroq(groqKey, groqMessages, 2048, 0.5);
-        debug.path = 'gemini-grounded';
-
       } else {
-        // No grounding — plain Groq
-        var groqMessages3 = [{ role: 'system', content: systemPrompt }].concat(messages);
-        reply = await callGroq(groqKey, groqMessages3, 2048, 0.7);
-        debug.path = 'groq-only';
+        // Non-factual → plain Groq
+        var groqMsgs2 = [{ role: 'system', content: systemPrompt }].concat(messages);
+        reply = await callGroq(groqKey, groqMsgs2, 2048, 0.7);
       }
 
       // ── Grounding failure note ──
