@@ -91,13 +91,45 @@ function isFactualQuestion(userMsg) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   var groqKey = process.env.GROQ_API_KEY;
   var geminiKey = process.env.GEMINI_API_KEY;
+
+  // ── GET /api/ai?test=1 — diagnostic endpoint ──
+  if (req.method === 'GET' && req.query && req.query.test) {
+    var results = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
+    if (!geminiKey) return res.json(results);
+    // Step 1: pick model
+    try {
+      var tm = await pickFlashModel(geminiKey);
+      results.steps.push({ step: 'pickModel', ok: true, model: tm });
+    } catch (e) {
+      results.steps.push({ step: 'pickModel', ok: false, error: e.message });
+      return res.json(results);
+    }
+    // Step 2: plain generate (no search)
+    try {
+      var pr = await geminiGenerate(geminiKey, tm, [{ role: 'user', parts: [{ text: 'Say hello in one word' }] }]);
+      results.steps.push({ step: 'plainGenerate', ok: true, text: extractGeminiText(pr).slice(0, 100) });
+    } catch (e) {
+      results.steps.push({ step: 'plainGenerate', ok: false, error: e.message.slice(0, 200) });
+    }
+    // Step 3: grounded generate (with Google Search)
+    try {
+      var gr = await geminiGenerate(geminiKey, tm, [{ role: 'user', parts: [{ text: 'Who is the current Chief Minister of Karnataka in 2024?' }] }], [{ google_search: {} }]);
+      var gt = extractGeminiText(gr);
+      var hasChunks = hasGroundingSupport(gr);
+      results.steps.push({ step: 'groundedGenerate', ok: true, text: gt.slice(0, 300), hasGroundingChunks: hasChunks });
+    } catch (e) {
+      results.steps.push({ step: 'groundedGenerate', ok: false, error: e.message.slice(0, 300) });
+    }
+    return res.json(results);
+  }
+
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!groqKey) return res.status(500).json({ error: 'GROQ_API_KEY not set' });
 
   var action = req.body.action;
