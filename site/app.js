@@ -872,6 +872,74 @@ async function processUserMessage(text, clarifyContext) {
 // ============================================================
 // AI CALL
 // ============================================================
+async function callGemini(action, payload) {
+  var res = await fetch('/api/gemini', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(Object.assign({ action: action }, payload)),
+  });
+  if (!res.ok) throw new Error('Gemini error ' + res.status);
+  return res.json();
+}
+
+async function groundWithGemini(userMsg) {
+  try {
+    var data = await callGemini('ground', { prompt: userMsg });
+    return data.text || '';
+  } catch (e) {
+    console.warn('Gemini grounding skipped:', e.message);
+    return '';
+  }
+}
+
+async function refineKannada(answer) {
+  try {
+    var data = await callGemini('kannada', { answer: answer });
+    return data.text || answer;
+  } catch (e) {
+    console.warn('Gemini Kannada refinement skipped:', e.message);
+    return answer;
+  }
+}
+
+function needsGrounding(userMsg) {
+  if (state.pdfDoc && shouldIncludePdfContext(userMsg)) return false;
+  if (/^(hi|hello|hey|thanks|thank you|ok|okay|bye|good)\b/i.test(userMsg.trim())) return false;
+  return true;
+}
+
+async function callGroq(messages) {
+  var apiKey = GROQ_API_KEY;
+  if (!apiKey || apiKey.length < 10) throw new Error('API key not configured');
+  var res = await fetch(GROQ_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages: messages,
+      max_tokens: 2048,
+      temperature: 0.7,
+    }),
+  });
+  if (!res.ok) {
+    var errText = await res.text().catch(function() { return ''; });
+    var errMsg = 'API error ' + res.status;
+    try {
+      var errData = JSON.parse(errText);
+      if (errData.error && errData.error.message) errMsg = errData.error.message;
+    } catch (e) {}
+    throw new Error(errMsg);
+  }
+  var data = await res.json();
+  if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+    throw new Error('Invalid response from API');
+  }
+  return data.choices[0].message.content || 'I could not generate a response. Please try again.';
+}
+
 async function callAI(clarifyContext) {
   if (!ensureApiKey()) return;
   showTypingIndicator();
@@ -879,57 +947,38 @@ async function callAI(clarifyContext) {
   const lastUserMsg = state.conversationHistory.length > 0
     ? state.conversationHistory[state.conversationHistory.length - 1].content || ''
     : '';
-  let systemPrompt = buildSystemPrompt(clarifyContext, lastUserMsg);
-
-  const recentHistory = state.conversationHistory.slice(-4);
-  let messages = [
-    { role: 'system', content: systemPrompt },
-    ...recentHistory.map(m => {
-      if (Array.isArray(m.content)) {
-        const textParts = m.content.filter(p => p.type === 'text').map(p => p.text).join('\n');
-        return { role: m.role, content: textParts || m.content };
-      }
-      return { role: m.role, content: m.content };
-    })
-  ];
 
   try {
-    const apiKey = GROQ_API_KEY;
-    if (!apiKey || apiKey.length < 10) {
-      throw new Error('API key not configured');
+    var groundedFacts = '';
+    if (needsGrounding(lastUserMsg)) {
+      groundedFacts = await groundWithGemini(lastUserMsg);
     }
-    const res = await fetch(GROQ_URL, {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        messages: messages,
-        max_tokens: 2048,
-        temperature: 0.7,
-      }),
-    });
+
+    let systemPrompt = buildSystemPrompt(clarifyContext, lastUserMsg);
+
+    if (groundedFacts) {
+      systemPrompt += '\n\n[VERIFIED FACTS from web search — use these for accuracy, cite if relevant]:\n' + groundedFacts;
+    }
+
+    const recentHistory = state.conversationHistory.slice(-4);
+    let messages = [
+      { role: 'system', content: systemPrompt },
+      ...recentHistory.map(m => {
+        if (Array.isArray(m.content)) {
+          const textParts = m.content.filter(p => p.type === 'text').map(p => p.text).join('\n');
+          return { role: m.role, content: textParts || m.content };
+        }
+        return { role: m.role, content: m.content };
+      })
+    ];
+
+    var reply = await callGroq(messages);
+
+    if (state.langMode === 'kn') {
+      reply = await refineKannada(reply);
+    }
 
     removeTypingIndicator();
-
-    if (!res.ok) {
-      const errText = await res.text().catch(function() { return ''; });
-      let errMsg = 'API error ' + res.status;
-      try {
-        const errData = JSON.parse(errText);
-        if (errData.error && errData.error.message) errMsg = errData.error.message;
-      } catch (e) {}
-      throw new Error(errMsg);
-    }
-
-    const data = await res.json();
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error('Invalid response from API');
-    }
-    const reply = data.choices[0].message.content || 'I could not generate a response. Please try again.';
-
     addMessageToUI('ai', reply);
     state.messages.push({ role: 'assistant', content: reply });
     state.conversationHistory.push({ role: 'assistant', content: reply });
