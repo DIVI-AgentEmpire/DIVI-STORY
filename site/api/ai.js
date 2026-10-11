@@ -1,6 +1,7 @@
 var GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 var GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 var GROQ_MODEL = 'openai/gpt-oss-120b';
+var GROQ_SEARCH_MODEL = 'compound-beta';
 
 var cachedModel = null;
 var cachedAt = 0;
@@ -59,11 +60,11 @@ function hasGroundingSupport(result) {
   return !!(c && c.groundingMetadata && c.groundingMetadata.groundingChunks && c.groundingMetadata.groundingChunks.length > 0);
 }
 
-async function callGroq(groqKey, messages, maxTokens, temperature) {
+async function callGroq(groqKey, messages, maxTokens, temperature, model) {
   var r = await fetch(GROQ_URL, {
     method: 'POST',
     headers: { 'Authorization': 'Bearer ' + groqKey, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: GROQ_MODEL, messages: messages, max_tokens: maxTokens || 2048, temperature: temperature || 0.7 }),
+    body: JSON.stringify({ model: model || GROQ_MODEL, messages: messages, max_tokens: maxTokens || 2048, temperature: temperature || 0.7 }),
   });
   if (!r.ok) {
     var errText = await r.text().catch(function () { return ''; });
@@ -91,12 +92,11 @@ function isFactualQuestion(userMsg) {
   return false;
 }
 
-// Try Gemini grounding with fallback chain:
+// Fallback chain for grounding:
 // 1. Gemini + Google Search (best: real-time web data)
-// 2. Gemini plain (fallback: training data, no web, but more recent than Groq)
-// 3. null (caller falls through to Groq)
+// 2. Gemini plain (newer training data than Groq)
+// 3. null (caller uses Groq compound-beta with web search, or plain Groq)
 async function tryGeminiGrounding(geminiKey, gemModel, userMsg) {
-  // Step 1: try with Google Search
   try {
     var result = await geminiGenerate(
       geminiKey, gemModel,
@@ -109,10 +109,8 @@ async function tryGeminiGrounding(geminiKey, gemModel, userMsg) {
     }
   } catch (e) {
     console.warn('Gemini+Search failed:', e.status || '', e.message.slice(0, 100));
-    // If 429, try without search
   }
 
-  // Step 2: try plain Gemini (no Google Search tool — separate/higher quota)
   try {
     var plainResult = await geminiGenerate(
       geminiKey, gemModel,
@@ -143,7 +141,7 @@ module.exports = async function handler(req, res) {
   var action = req.body.action;
 
   try {
-    // ── CHAT: full pipeline ──
+    // ── CHAT ──
     if (action === 'chat') {
       var systemPrompt = req.body.systemPrompt || '';
       var messages = req.body.messages || [];
@@ -156,21 +154,18 @@ module.exports = async function handler(req, res) {
       var geminiInfo = null;
       var factual = isFactualQuestion(userMsg);
 
-      // ── Stage 1: Gemini grounding (with fallback chain) ──
+      // ── Stage 1: try Gemini grounding ──
       if (geminiKey && shouldGround(userMsg, hasPdfContext)) {
         var gemModel;
         try { gemModel = await pickFlashModel(geminiKey); } catch (e) { gemModel = 'gemini-2.5-flash'; }
         debug.geminiModel = gemModel;
-
         geminiInfo = await tryGeminiGrounding(geminiKey, gemModel, userMsg);
 
         if (geminiInfo) {
-          debug.path = geminiInfo.source;
-          if (geminiInfo.grounded) debug.path = 'gemini-grounded';
+          debug.path = geminiInfo.grounded ? 'gemini-grounded' : geminiInfo.source;
         } else {
           groundingFailed = true;
           debug.groundingError = 'All Gemini calls failed (likely 429 quota)';
-          debug.path = 'groq-only';
         }
       } else if (!geminiKey) {
         debug.groundingError = 'GEMINI_API_KEY not set';
@@ -178,27 +173,43 @@ module.exports = async function handler(req, res) {
 
       var reply;
 
-      // ── Stage 2: Generate answer ──
+      // ── Stage 2: generate answer ──
       if (factual && geminiInfo && (geminiInfo.grounded || geminiInfo.source === 'gemini-plain')) {
-        // Factual question with Gemini data available
-        if (geminiInfo.grounded) {
-          // Best case: web-grounded Gemini answer — use directly
-          debug.path = 'gemini-direct';
-          reply = geminiInfo.text;
-        } else {
-          // Gemini plain (no web search, but newer training data than Groq)
-          debug.path = 'gemini-plain';
-          reply = geminiInfo.text;
+        // Gemini answered a factual question — use its answer directly
+        debug.path = geminiInfo.grounded ? 'gemini-direct' : 'gemini-plain';
+        reply = geminiInfo.text;
+
+      } else if (factual && !geminiInfo) {
+        // Factual question but Gemini unavailable — use Groq compound-beta (has web search)
+        try {
+          reply = await callGroq(
+            groqKey,
+            [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
+            2048, 0.3, GROQ_SEARCH_MODEL
+          );
+          debug.path = 'groq-search';
+          groundingFailed = false;
+        } catch (compoundErr) {
+          console.warn('Groq compound-beta failed:', compoundErr.message.slice(0, 100));
+          // Final fallback: regular Groq
+          var groqMsgs = [{ role: 'system', content: systemPrompt }].concat(messages);
+          reply = await callGroq(groqKey, groqMsgs, 2048, 0.7);
+          debug.path = 'groq-only';
+          groundingFailed = true;
         }
+
       } else if (geminiInfo && geminiInfo.text) {
         // Non-factual question with Gemini context — feed to Groq
-        var fullSystemPrompt = systemPrompt + '\n\n[VERIFIED FACTS from search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + geminiInfo.text;
-        var groqMessages = [{ role: 'system', content: fullSystemPrompt }].concat(messages);
+        var fullSP = systemPrompt + '\n\n[VERIFIED FACTS from search — CORRECT and CURRENT. You MUST use these facts. Do NOT contradict them.]:\n' + geminiInfo.text;
+        var groqMessages = [{ role: 'system', content: fullSP }].concat(messages);
         reply = await callGroq(groqKey, groqMessages, 2048, 0.5);
+        debug.path = 'gemini-grounded';
+
       } else {
-        // No Gemini data — Groq only
+        // No grounding — plain Groq
         var groqMessages3 = [{ role: 'system', content: systemPrompt }].concat(messages);
         reply = await callGroq(groqKey, groqMessages3, 2048, 0.7);
+        debug.path = 'groq-only';
       }
 
       // ── Grounding failure note ──
@@ -245,7 +256,7 @@ module.exports = async function handler(req, res) {
       return res.json({ reply: reply, groundingFailed: groundingFailed, debug: debug });
     }
 
-    // ── QUIZ: generate MCQ via Groq ──
+    // ── QUIZ ──
     if (action === 'quiz') {
       var quizSystem = req.body.systemPrompt || '';
       var quizUser = req.body.userMsg || '';
@@ -257,9 +268,22 @@ module.exports = async function handler(req, res) {
       return res.json({ reply: quizReply });
     }
 
-    // ── TEST: diagnostic endpoint ──
+    // ── TEST ──
     if (action === 'test') {
       var testResults = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
+
+      // Test Groq compound-beta (web search)
+      try {
+        var searchReply = await callGroq(
+          groqKey,
+          [{ role: 'user', content: 'Who is the current Chief Minister of Karnataka?' }],
+          512, 0.3, GROQ_SEARCH_MODEL
+        );
+        testResults.steps.push({ step: 'groqSearch', ok: true, text: searchReply.slice(0, 300) });
+      } catch (e5) {
+        testResults.steps.push({ step: 'groqSearch', ok: false, error: e5.message.slice(0, 200) });
+      }
+
       if (!geminiKey) return res.json(testResults);
       var tm2;
       try {
@@ -277,8 +301,7 @@ module.exports = async function handler(req, res) {
       }
       try {
         var gr2 = await geminiGenerate(geminiKey, tm2, [{ role: 'user', parts: [{ text: 'Who is the current Chief Minister of Karnataka?' }] }], [{ google_search: {} }]);
-        var gt2 = extractGeminiText(gr2);
-        testResults.steps.push({ step: 'groundedGenerate', ok: true, text: gt2.slice(0, 300), hasGroundingChunks: hasGroundingSupport(gr2) });
+        testResults.steps.push({ step: 'groundedGenerate', ok: true, text: extractGeminiText(gr2).slice(0, 300), hasGroundingChunks: hasGroundingSupport(gr2) });
       } catch (e4) {
         testResults.steps.push({ step: 'groundedGenerate', ok: false, error: e4.message.slice(0, 300) });
       }
