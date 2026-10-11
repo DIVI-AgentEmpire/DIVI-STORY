@@ -107,6 +107,7 @@ let state = {
   pendingUserMessage: '',
   langMode: 'en',
   isIndia: false,
+  debugMode: false,
 };
 
 // ============================================================
@@ -291,7 +292,11 @@ function checkAdminAccess() {
   try {
     var params = new URLSearchParams(window.location.search);
     if (params.get('admin') === ADMIN_SECRET) {
+      state.debugMode = true;
       setTimeout(openAdminPanel, 500);
+    }
+    if (params.get('debug') === ADMIN_SECRET) {
+      state.debugMode = true;
     }
     var proCode = params.get('activate');
     if (proCode) {
@@ -917,6 +922,20 @@ async function callAI(clarifyContext) {
 
     removeTypingIndicator();
     addMessageToUI('ai', reply);
+
+    if (state.debugMode && data.debug) {
+      var d = data.debug;
+      var label = d.path === 'gemini-direct' ? 'Gemini direct ✓'
+        : d.path === 'gemini-grounded' ? 'Gemini grounded → Groq ✓'
+        : 'Groq only';
+      if (d.groundingError) label += ' | ' + d.groundingError.slice(0, 80);
+      if (d.geminiModel) label += ' | model: ' + d.geminiModel;
+      var dbgEl = document.createElement('div');
+      dbgEl.style.cssText = 'font-size:11px;color:#888;padding:2px 12px;font-family:monospace;';
+      dbgEl.textContent = '🔍 ' + label;
+      document.getElementById('chat-area').appendChild(dbgEl);
+    }
+
     state.messages.push({ role: 'assistant', content: reply });
     state.conversationHistory.push({ role: 'assistant', content: reply });
     saveCurrentChat();

@@ -29,16 +29,17 @@ async function pickFlashModel(apiKey) {
   }
 }
 
-async function geminiGenerate(apiKey, model, contents, tools) {
+async function geminiGenerate(apiKey, model, contents, tools, systemInstruction) {
   var body = { contents: contents };
   if (tools) body.tools = tools;
+  if (systemInstruction) body.systemInstruction = { parts: [{ text: systemInstruction }] };
   var res = await fetch(
     GEMINI_BASE + '/models/' + model + ':generateContent?key=' + apiKey,
     { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
   );
   if (!res.ok) {
     var errText = await res.text().catch(function () { return ''; });
-    throw new Error('Gemini ' + res.status + ': ' + errText.slice(0, 200));
+    throw new Error('Gemini ' + res.status + ': ' + errText.slice(0, 300));
   }
   return res.json();
 }
@@ -49,6 +50,11 @@ function extractGeminiText(result) {
     return c.content.parts.map(function (p) { return p.text || ''; }).join('');
   }
   return '';
+}
+
+function hasGroundingSupport(result) {
+  var c = result.candidates && result.candidates[0];
+  return !!(c && c.groundingMetadata && c.groundingMetadata.groundingChunks && c.groundingMetadata.groundingChunks.length > 0);
 }
 
 async function callGroq(groqKey, messages, maxTokens, temperature) {
@@ -74,6 +80,15 @@ function shouldGround(userMsg, hasPdfContext) {
   return true;
 }
 
+function isFactualQuestion(userMsg) {
+  var msg = userMsg.toLowerCase();
+  if (/\b(who is|who was|who are|current|present|latest|recent|as of|right now|today)\b/.test(msg)) return true;
+  if (/\b(cm |chief minister|prime minister|pm |president|governor|minister)\b/.test(msg)) return true;
+  if (/\b(population|capital of|gdp|when did|when was|how many|price of|cost of|rate of)\b/.test(msg)) return true;
+  if (/\b(news|latest|update|announce|elect|appoint|resign|winner|result)\b/.test(msg)) return true;
+  return false;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -88,7 +103,7 @@ module.exports = async function handler(req, res) {
   var action = req.body.action;
 
   try {
-    // ── CHAT: full pipeline (grounding → Groq → Kannada) ──
+    // ── CHAT: full pipeline ──
     if (action === 'chat') {
       var systemPrompt = req.body.systemPrompt || '';
       var messages = req.body.messages || [];
@@ -96,40 +111,92 @@ module.exports = async function handler(req, res) {
       var langMode = req.body.langMode || 'en';
       var hasPdfContext = req.body.hasPdfContext || false;
 
+      var debug = { path: 'groq-only', geminiModel: null, groundingError: null };
       var groundingFailed = false;
       var groundedFacts = '';
+      var groundingResult = null;
+      var factual = isFactualQuestion(userMsg);
 
+      // ── Stage 1: Gemini grounding ──
       if (geminiKey && shouldGround(userMsg, hasPdfContext)) {
         var gemModel;
         try { gemModel = await pickFlashModel(geminiKey); } catch (e) { gemModel = 'gemini-2.5-flash'; }
+        debug.geminiModel = gemModel;
         try {
-          var gResult = await geminiGenerate(
+          groundingResult = await geminiGenerate(
             geminiKey, gemModel,
             [{ role: 'user', parts: [{ text: userMsg }] }],
             [{ google_search: {} }]
           );
-          groundedFacts = extractGeminiText(gResult);
+          groundedFacts = extractGeminiText(groundingResult);
+          if (groundedFacts) {
+            debug.path = 'gemini-grounded';
+          } else {
+            debug.path = 'groq-only';
+            debug.groundingError = 'Gemini returned empty text';
+          }
         } catch (e) {
           console.warn('Grounding failed:', e.message);
           groundingFailed = true;
+          debug.groundingError = e.message;
+          debug.path = 'groq-only';
         }
+      } else if (!geminiKey) {
+        debug.groundingError = 'GEMINI_API_KEY not set';
       }
 
-      var fullSystemPrompt = systemPrompt;
-      if (groundedFacts) {
-        fullSystemPrompt += '\n\n[VERIFIED FACTS from web search — use these for accuracy, cite if relevant]:\n' + groundedFacts;
+      var reply;
+
+      // ── Stage 2: Generate answer ──
+      if (factual && groundedFacts && hasGroundingSupport(groundingResult)) {
+        // For factual questions with good grounding, let Gemini answer directly
+        // so Groq can't override the web-searched facts
+        debug.path = 'gemini-direct';
+        var gemModel2;
+        try { gemModel2 = await pickFlashModel(geminiKey); } catch (e) { gemModel2 = 'gemini-2.5-flash'; }
+        try {
+          var directResult = await geminiGenerate(
+            geminiKey, gemModel2,
+            [{ role: 'user', parts: [{ text: userMsg }] }],
+            [{ google_search: {} }],
+            systemPrompt
+          );
+          reply = extractGeminiText(directResult);
+          if (!reply) {
+            // Fallback to Groq with grounded facts if Gemini gives empty answer
+            debug.path = 'gemini-grounded';
+            var fullSP = systemPrompt + '\n\n[VERIFIED FACTS from web search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + groundedFacts;
+            var groqMsgs = [{ role: 'system', content: fullSP }].concat(messages);
+            reply = await callGroq(groqKey, groqMsgs, 2048, 0.4);
+          }
+        } catch (e) {
+          // Gemini direct failed, fall back to Groq with grounded facts
+          console.warn('Gemini direct answer failed, using Groq:', e.message);
+          debug.path = 'gemini-grounded';
+          var fullSP2 = systemPrompt + '\n\n[VERIFIED FACTS from web search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + groundedFacts;
+          var groqMsgs2 = [{ role: 'system', content: fullSP2 }].concat(messages);
+          reply = await callGroq(groqKey, groqMsgs2, 2048, 0.4);
+        }
+      } else if (groundedFacts) {
+        // Non-factual question but grounding found useful context — feed to Groq with stronger instruction
+        var fullSystemPrompt = systemPrompt + '\n\n[VERIFIED FACTS from web search — these are CORRECT and CURRENT. You MUST use these facts in your answer. Do NOT contradict them.]:\n' + groundedFacts;
+        var groqMessages = [{ role: 'system', content: fullSystemPrompt }].concat(messages);
+        reply = await callGroq(groqKey, groqMessages, 2048, 0.5);
+      } else {
+        // No grounding — Groq only
+        var groqMessages3 = [{ role: 'system', content: systemPrompt }].concat(messages);
+        reply = await callGroq(groqKey, groqMessages3, 2048, 0.7);
       }
 
-      var groqMessages = [{ role: 'system', content: fullSystemPrompt }].concat(messages);
-      var reply = await callGroq(groqKey, groqMessages, 2048, 0.7);
-
-      if (groundingFailed) {
+      // ── Grounding failure note ──
+      if (groundingFailed && factual) {
         reply += '\n\n---\n⚠️ *I could not verify this with the latest sources. Please cross-check recent textbooks or official sites for the most current information.*';
       }
 
+      // ── Stage 3: Kannada refinement ──
       if ((langMode === 'kn' || langMode === 'kn-mix') && geminiKey) {
-        var gemModel2;
-        try { gemModel2 = await pickFlashModel(geminiKey); } catch (e) { gemModel2 = 'gemini-2.5-flash'; }
+        var gemModel3;
+        try { gemModel3 = await pickFlashModel(geminiKey); } catch (e) { gemModel3 = 'gemini-2.5-flash'; }
         var knPrompt;
         if (langMode === 'kn') {
           knPrompt =
@@ -152,7 +219,7 @@ module.exports = async function handler(req, res) {
         }
         try {
           var knResult = await geminiGenerate(
-            geminiKey, gemModel2,
+            geminiKey, gemModel3,
             [{ role: 'user', parts: [{ text: knPrompt }] }]
           );
           var knText = extractGeminiText(knResult);
@@ -162,7 +229,7 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      return res.json({ reply: reply, groundingFailed: groundingFailed });
+      return res.json({ reply: reply, groundingFailed: groundingFailed, debug: debug });
     }
 
     // ── QUIZ: generate MCQ via Groq ──
