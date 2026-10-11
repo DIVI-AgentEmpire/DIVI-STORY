@@ -37,6 +37,43 @@
 </div>
 </div>
 
+<!-- Onboarding Modal -->
+<div class="modal-overlay" id="onboarding-modal">
+<div class="modal">
+<div class="modal-header">
+<h3 id="onboarding-title">Tell us about you</h3>
+<button class="modal-close" onclick="skipOnboarding()">Skip</button>
+</div>
+<div class="modal-body">
+<div class="onboard-step active" data-step="0">
+<p class="onboard-q">Who are you?</p>
+<div class="onboard-options">
+<button class="onboard-opt" onclick="selectOnboard(0,'Student')">&#127891; Student</button>
+<button class="onboard-opt" onclick="selectOnboard(0,'Competitive Exam')">&#128221; Exam Aspirant</button>
+<button class="onboard-opt" onclick="selectOnboard(0,'Other')">&#128218; Other Learner</button>
+</div>
+</div>
+<div class="onboard-step" data-step="1">
+<p class="onboard-q">What class or exam?</p>
+<div class="onboard-options" id="onboard-step1-opts"></div>
+</div>
+<div class="onboard-step" data-step="2">
+<p class="onboard-q">Preferred language</p>
+<div class="onboard-options">
+<button class="onboard-opt" onclick="selectOnboard(2,'en')">English</button>
+<button class="onboard-opt" onclick="selectOnboard(2,'kn-mix')">&#3221;&#3240;&#3277;&#3240;&#3233; + English</button>
+<button class="onboard-opt" onclick="selectOnboard(2,'kn')">&#3242;&#3266;&#3248;&#3277;&#3235; &#3221;&#3240;&#3277;&#3240;&#3233;</button>
+</div>
+</div>
+<div class="onboard-progress">
+<div class="clarify-dot active" id="odot-0"></div>
+<div class="clarify-dot" id="odot-1"></div>
+<div class="clarify-dot" id="odot-2"></div>
+</div>
+</div>
+</div>
+</div>
+
 <!-- Overlay for sidebar -->
 <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
 
@@ -79,26 +116,14 @@
 
 <div class="sidebar-section">
 <div class="sidebar-section-title">Preferences</div>
-<div class="toggle-row">
-<span class="toggle-label">Auto Quiz on Upload</span>
-<div class="toggle" id="toggle-autoquiz" onclick="toggleSetting('autoQuiz',this)"></div>
+<div id="lang-toggle-row" style="display:none">
+<div class="lang-selector">
+<button class="lang-btn active" data-lang="en" onclick="setLangMode('en')">English</button>
+<button class="lang-btn" data-lang="kn-mix" onclick="setLangMode('kn-mix')">ಕನ್ನಡ+Eng</button>
+<button class="lang-btn" data-lang="kn" onclick="setLangMode('kn')">ಪೂರ್ಣ ಕನ್ನಡ</button>
 </div>
-<div class="toggle-row">
-<span class="toggle-label">Save Chat History</span>
-<div class="toggle on" id="toggle-savehistory" onclick="toggleSetting('saveHistory',this)"></div>
 </div>
-<div class="toggle-row">
-<span class="toggle-label">Grounded Replies</span>
-<div class="toggle" id="toggle-grounded" onclick="toggleSetting('groundedReplies',this)"></div>
-</div>
-<div class="toggle-row">
-<span class="toggle-label">Notifications</span>
-<div class="toggle on" id="toggle-notif" onclick="toggleSetting('notifications',this)"></div>
-</div>
-<div class="toggle-row" id="lang-toggle-row" style="display:none">
-<span class="toggle-label" id="lang-toggle-label">&#3221;&#3240;&#3277;&#3240;&#3233; + English</span>
-<div class="toggle" id="toggle-lang" onclick="toggleLanguageMode(this)"></div>
-</div>
+<button class="edit-profile-btn" onclick="editProfile()">Edit Profile</button>
 </div>
 
 <div class="sidebar-section" style="padding-top:0">

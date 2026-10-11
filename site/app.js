@@ -98,11 +98,12 @@ let state = {
   currentUserId: null,
   isGuest: true,
   settings: {
-    autoQuiz: false,
-    saveHistory: true,
-    groundedReplies: false,
     sendPdfContext: false,
-    notifications: true,
+  },
+  profile: {
+    learnerType: null,
+    classOrExam: null,
+    langPref: null,
   },
   clarifySelections: {},
   pendingUserMessage: '',
@@ -151,6 +152,7 @@ function loadState() {
       state.settings = { ...state.settings, ...(parsed.settings || {}) };
       state.isPro = parsed.isPro || false;
       state.langMode = parsed.langMode || 'en';
+      if (parsed.profile) state.profile = { ...state.profile, ...parsed.profile };
     }
   } catch (e) {}
   if (isTrialActive()) state.isPro = true;
@@ -158,13 +160,13 @@ function loadState() {
 
 function saveState() {
   try {
-    if (!state.settings.saveHistory) return;
     const limit = state.isPro ? state.chatHistory.length : (state.isGuest ? FREE_CHAT_HISTORY_LIMIT : 10);
     localStorage.setItem(getStorageKey(), JSON.stringify({
       chatHistory: state.chatHistory.slice(0, limit),
       settings: state.settings,
       isPro: state.isPro,
       langMode: state.langMode,
+      profile: state.profile,
     }));
   } catch (e) {}
 }
@@ -232,41 +234,27 @@ function hasUsedTrial() {
 function initIndiaUI() {
   if (state.isIndia) {
     var langRow = document.getElementById('lang-toggle-row');
-    if (langRow) langRow.style.display = 'flex';
-    var langToggle = document.getElementById('toggle-lang');
-    updateLangToggleUI(langToggle);
+    if (langRow) langRow.style.display = 'block';
+    updateLangSelector();
     var proBtn = document.getElementById('sidebar-pro-btn');
     if (proBtn) proBtn.innerHTML = 'Explore Pro &#183; ₹99/mo';
     updateClarifyForIndia();
   }
 }
 
-function toggleLanguageMode(el) {
-  if (state.langMode === 'en') {
-    state.langMode = 'kn-mix';
-  } else if (state.langMode === 'kn-mix') {
-    state.langMode = 'kn';
-  } else {
-    state.langMode = 'en';
-  }
-  updateLangToggleUI(el);
+function setLangMode(mode) {
+  state.langMode = mode;
+  updateLangSelector();
   saveState();
   var labels = { en: 'English mode', 'kn-mix': 'ಕನ್ನಡ + English mode', kn: 'ಪೂರ್ಣ ಕನ್ನಡ mode' };
   showToast(labels[state.langMode], 'info');
 }
 
-function updateLangToggleUI(toggleEl) {
-  var label = document.getElementById('lang-toggle-label');
-  if (state.langMode === 'en') {
-    if (toggleEl) toggleEl.classList.remove('on');
-    if (label) label.textContent = 'ಕನ್ನಡ + English';
-  } else if (state.langMode === 'kn-mix') {
-    if (toggleEl) toggleEl.classList.add('on');
-    if (label) label.textContent = 'ಕನ್ನಡ + English ✔';
-  } else {
-    if (toggleEl) toggleEl.classList.add('on');
-    if (label) label.textContent = 'ಪೂರ್ಣ ಕನ್ನಡ ✔';
-  }
+function updateLangSelector() {
+  var btns = document.querySelectorAll('.lang-btn');
+  btns.forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-lang') === state.langMode);
+  });
 }
 
 function updateClarifyForIndia() {
@@ -348,10 +336,7 @@ function toggleSetting(key, el) {
 }
 
 function restoreSettings() {
-  document.getElementById('toggle-autoquiz').classList.toggle('on', state.settings.autoQuiz);
-  document.getElementById('toggle-savehistory').classList.toggle('on', state.settings.saveHistory);
-  document.getElementById('toggle-grounded').classList.toggle('on', state.settings.groundedReplies);
-  document.getElementById('toggle-notif').classList.toggle('on', state.settings.notifications);
+  updateLangSelector();
 }
 
 // ============================================================
@@ -409,7 +394,7 @@ function renderRecentChats() {
 }
 
 function saveCurrentChat() {
-  if (state.messages.length === 0 || !state.settings.saveHistory) return;
+  if (state.messages.length === 0) return;
   const firstUserMsg = state.messages.find(m => m.role === 'user');
   const title = firstUserMsg ? firstUserMsg.content.slice(0, 50) : 'New Chat';
   const chat = {
@@ -645,10 +630,6 @@ async function handlePdfUpload(e) {
       showToast('PDF loaded — ' + nonEmptyPages + ' page(s) extracted', 'success');
     } else {
       showToast('PDF loaded but no text found (scanned PDF?)', 'warning');
-    }
-
-    if (state.settings.autoQuiz) {
-      setTimeout(() => startQuiz(), 500);
     }
 
     let contextMsg;
@@ -1014,8 +995,10 @@ Example tone: "Depreciation (ಸವಕಳಿ) ಅಂದ್ರೆ asset ನ value
     prompt += `\nLevel: ${clarifyContext.level}, subject: ${clarifyContext.subject}, need: ${clarifyContext.need}.`;
   }
 
-  if (state.settings.groundedReplies) {
-    prompt += `\nOnly state what you are confident about.`;
+  if (state.profile.learnerType && state.profile.classOrExam) {
+    prompt += `\nThis student is a ${state.profile.learnerType} studying ${state.profile.classOrExam}. Adjust difficulty, examples, and exam tips to match their level.`;
+  } else if (state.profile.learnerType) {
+    prompt += `\nThis student is a ${state.profile.learnerType}. Adjust your teaching level accordingly.`;
   }
 
   return prompt;
@@ -1770,6 +1753,7 @@ function setAuthUI(user) {
       chatHistory: guestChats,
       settings: state.settings,
       isPro: state.isPro,
+      profile: state.profile,
     }));
   }
 
@@ -1791,6 +1775,10 @@ function setAuthUI(user) {
   updateUsageUI();
   document.getElementById('chat-area').innerHTML = '';
   showEmptyState();
+
+  if (!state.profile.learnerType) {
+    setTimeout(showOnboarding, 400);
+  }
 }
 
 function continueAsGuest() {
@@ -1802,6 +1790,108 @@ function continueAsGuest() {
   document.getElementById('avatar-initials').textContent = 'G';
   document.getElementById('auth-action-btn').textContent = 'Sign In';
   updateUsageUI();
+
+  if (!state.profile.learnerType) {
+    setTimeout(showOnboarding, 400);
+  }
+}
+
+// ============================================================
+// ONBOARDING
+// ============================================================
+var onboardStep = 0;
+
+function showOnboarding() {
+  onboardStep = 0;
+  var steps = document.querySelectorAll('.onboard-step');
+  steps.forEach(function(s, i) { s.classList.toggle('active', i === 0); });
+  var dots = document.querySelectorAll('#onboarding-modal .clarify-dot');
+  dots.forEach(function(d, i) { d.className = 'clarify-dot' + (i === 0 ? ' active' : ''); });
+  document.querySelectorAll('.onboard-opt').forEach(function(o) { o.classList.remove('selected'); });
+  document.getElementById('onboarding-modal').classList.add('open');
+}
+
+function selectOnboard(step, value) {
+  var stepEl = document.querySelector('.onboard-step[data-step="' + step + '"]');
+  if (stepEl) {
+    stepEl.querySelectorAll('.onboard-opt').forEach(function(o) { o.classList.remove('selected'); });
+    event.target.classList.add('selected');
+  }
+
+  if (step === 0) {
+    state.profile.learnerType = value;
+    populateStep1(value);
+    goToOnboardStep(1);
+  } else if (step === 1) {
+    state.profile.classOrExam = value;
+    if (state.isIndia) {
+      goToOnboardStep(2);
+    } else {
+      state.profile.langPref = 'en';
+      state.langMode = 'en';
+      finishOnboarding();
+    }
+  } else if (step === 2) {
+    state.profile.langPref = value;
+    state.langMode = value;
+    updateLangSelector();
+    finishOnboarding();
+  }
+}
+
+function populateStep1(learnerType) {
+  var opts = document.getElementById('onboard-step1-opts');
+  if (!opts) return;
+  var buttons = '';
+  if (learnerType === 'Student') {
+    buttons =
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'SSLC (10th)\')">SSLC (10th)</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'1st PUC\')">1st PUC</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'2nd PUC\')">2nd PUC</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'B.Com\')">B.Com</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'BBA / Other Degree\')">BBA / Other Degree</button>';
+  } else if (learnerType === 'Competitive Exam') {
+    buttons =
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'KEA VAO/PDO\')">KEA VAO/PDO</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'KPSC\')">KPSC</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'FDA/SDA\')">FDA/SDA</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'PSI\')">PSI</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'SSC\')">SSC</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'Other Exam\')">Other Exam</button>';
+  } else {
+    buttons =
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'General Learning\')">General Learning</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'Skill Development\')">Skill Development</button>' +
+      '<button class="onboard-opt" onclick="selectOnboard(1,\'Exam Prep\')">Exam Prep</button>';
+  }
+  opts.innerHTML = buttons;
+}
+
+function goToOnboardStep(step) {
+  onboardStep = step;
+  var steps = document.querySelectorAll('.onboard-step');
+  steps.forEach(function(s, i) { s.classList.toggle('active', i === step); });
+  var dots = document.querySelectorAll('#onboarding-modal .clarify-dot');
+  dots.forEach(function(d, i) {
+    d.className = 'clarify-dot' + (i === step ? ' active' : (i < step ? ' done' : ''));
+  });
+}
+
+function finishOnboarding() {
+  document.getElementById('onboarding-modal').classList.remove('open');
+  saveState();
+  var msg = 'Profile set: ' + state.profile.learnerType;
+  if (state.profile.classOrExam) msg += ' · ' + state.profile.classOrExam;
+  showToast(msg, 'success');
+}
+
+function skipOnboarding() {
+  document.getElementById('onboarding-modal').classList.remove('open');
+}
+
+function editProfile() {
+  closeSidebar();
+  showOnboarding();
 }
 
 function handleAuthAction() {

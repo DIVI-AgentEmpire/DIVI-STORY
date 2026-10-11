@@ -357,6 +357,34 @@ background:var(--surface);border:1px solid var(--border);transition:.2s;
 .clarify-dot.active{background:var(--purple)}
 .clarify-dot.done{background:var(--teal)}
 
+/* Onboarding modal */
+.onboard-step{display:none}
+.onboard-step.active{display:block}
+.onboard-q{font-size:14px;font-weight:600;margin-bottom:12px}
+.onboard-options{display:flex;flex-wrap:wrap;gap:8px}
+.onboard-opt{
+padding:10px 16px;border-radius:20px;font-size:13px;font-weight:500;
+background:var(--surface);border:1px solid var(--border);transition:.2s;
+}
+.onboard-opt:hover,.onboard-opt.selected{border-color:var(--purple);background:rgba(124,58,237,.15);color:var(--purple)}
+.onboard-progress{display:flex;gap:6px;justify-content:center;margin-top:16px}
+
+/* Language selector */
+.lang-selector{display:flex;gap:4px;width:100%;margin-bottom:8px}
+.lang-btn{
+flex:1;padding:8px 4px;border-radius:var(--radius-sm);font-size:12px;font-weight:500;
+background:var(--surface);border:1px solid var(--border);color:var(--text-dim);transition:.2s;
+}
+.lang-btn.active{border-color:var(--purple);background:rgba(124,58,237,.15);color:var(--purple)}
+
+/* Edit profile button */
+.edit-profile-btn{
+width:100%;padding:10px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;
+background:var(--surface);border:1px solid var(--border);color:var(--text-dim);transition:.2s;
+margin-top:4px;
+}
+.edit-profile-btn:hover{border-color:var(--purple);color:var(--text)}
+
 /* Upgrade modal */
 .upgrade-features{list-style:none;margin:16px 0}
 .upgrade-features li{
