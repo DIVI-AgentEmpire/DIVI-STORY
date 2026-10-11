@@ -94,37 +94,26 @@ function isFactualQuestion(userMsg) {
 
 async function searchWeb(query) {
   try {
-    var url = 'https://api.duckduckgo.com/?q=' + encodeURIComponent(query) + '&format=json&no_html=1&skip_disambig=1';
-    var r = await fetch(url, { headers: { 'User-Agent': 'DIVI-Mind/1.0' } });
+    var searchUrl = 'https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=' +
+      encodeURIComponent(query) + '&srlimit=3&format=json&origin=*';
+    var r = await fetch(searchUrl);
     if (!r.ok) return null;
     var data = await r.json();
+    if (!data.query || !data.query.search || data.query.search.length === 0) return null;
     var facts = [];
-    if (data.AbstractText) facts.push(data.AbstractText);
-    if (data.Answer) facts.push(data.Answer);
-    if (data.RelatedTopics) {
-      for (var i = 0; i < Math.min(data.RelatedTopics.length, 5); i++) {
-        if (data.RelatedTopics[i] && data.RelatedTopics[i].Text) facts.push(data.RelatedTopics[i].Text);
-      }
+    for (var i = 0; i < Math.min(data.query.search.length, 2); i++) {
+      var title = data.query.search[i].title;
+      try {
+        var r2 = await fetch('https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title));
+        if (r2.ok) {
+          var summary = await r2.json();
+          if (summary.extract) facts.push(summary.extract);
+        }
+      } catch (e2) {}
     }
-    if (facts.length > 0) return facts.join('\n');
+    if (facts.length > 0) return facts.join('\n\n');
   } catch (e) {
-    console.warn('DDG API failed:', e.message.slice(0, 80));
-  }
-  try {
-    var htmlUrl = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query);
-    var r2 = await fetch(htmlUrl, { headers: { 'User-Agent': 'DIVI-Mind/1.0' } });
-    if (!r2.ok) return null;
-    var html = await r2.text();
-    var snippets = [];
-    var re = /class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
-    var m;
-    while ((m = re.exec(html)) !== null && snippets.length < 5) {
-      var text = m[1].replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').trim();
-      if (text.length > 30) snippets.push(text);
-    }
-    if (snippets.length > 0) return snippets.join('\n');
-  } catch (e2) {
-    console.warn('DDG HTML failed:', e2.message.slice(0, 80));
+    console.warn('Wikipedia search failed:', e.message.slice(0, 80));
   }
   return null;
 }
@@ -239,8 +228,8 @@ module.exports = async function handler(req, res) {
 
       // Test web search (DuckDuckGo)
       try {
-        var webResult = await searchWeb('Who is the current Chief Minister of Karnataka?');
-        testResults.steps.push({ step: 'webSearch', ok: !!webResult, text: webResult ? webResult.slice(0, 400) : 'No results' });
+        var webResult = await searchWeb('current Chief Minister of Karnataka');
+        testResults.steps.push({ step: 'webSearch', ok: !!webResult, text: webResult ? webResult.slice(0, 500) : 'No results' });
       } catch (e5) {
         testResults.steps.push({ step: 'webSearch', ok: false, error: e5.message.slice(0, 200) });
       }
