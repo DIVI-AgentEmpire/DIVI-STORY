@@ -1,7 +1,7 @@
 var GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 var GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 var GROQ_MODEL = 'openai/gpt-oss-120b';
-var GROQ_SEARCH_MODEL = 'compound-beta';
+var GROQ_SEARCH_MODEL = 'groq/compound';
 
 var cachedModel = null;
 var cachedAt = 0;
@@ -180,18 +180,25 @@ module.exports = async function handler(req, res) {
         reply = geminiInfo.text;
 
       } else if (factual && !geminiInfo) {
-        // Factual question but Gemini unavailable — use Groq compound-beta (has web search)
-        try {
-          reply = await callGroq(
-            groqKey,
-            [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
-            2048, 0.3, GROQ_SEARCH_MODEL
-          );
-          debug.path = 'groq-search';
-          groundingFailed = false;
-        } catch (compoundErr) {
-          console.warn('Groq compound-beta failed:', compoundErr.message.slice(0, 100));
-          // Final fallback: regular Groq
+        // Factual question but Gemini unavailable — use Groq compound (has web search)
+        var searchModels = ['groq/compound', 'compound-beta'];
+        var searchOk = false;
+        for (var si = 0; si < searchModels.length && !searchOk; si++) {
+          try {
+            reply = await callGroq(
+              groqKey,
+              [{ role: 'system', content: systemPrompt }, { role: 'user', content: userMsg }],
+              2048, 0.3, searchModels[si]
+            );
+            debug.path = 'groq-search';
+            debug.searchModel = searchModels[si];
+            groundingFailed = false;
+            searchOk = true;
+          } catch (compoundErr) {
+            console.warn('Groq ' + searchModels[si] + ' failed:', compoundErr.message.slice(0, 100));
+          }
+        }
+        if (!searchOk) {
           var groqMsgs = [{ role: 'system', content: systemPrompt }].concat(messages);
           reply = await callGroq(groqKey, groqMsgs, 2048, 0.7);
           debug.path = 'groq-only';
@@ -272,16 +279,20 @@ module.exports = async function handler(req, res) {
     if (action === 'test') {
       var testResults = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
 
-      // Test Groq compound-beta (web search)
-      try {
-        var searchReply = await callGroq(
-          groqKey,
-          [{ role: 'user', content: 'Who is the current Chief Minister of Karnataka?' }],
-          512, 0.3, GROQ_SEARCH_MODEL
-        );
-        testResults.steps.push({ step: 'groqSearch', ok: true, text: searchReply.slice(0, 300) });
-      } catch (e5) {
-        testResults.steps.push({ step: 'groqSearch', ok: false, error: e5.message.slice(0, 200) });
+      // Test Groq compound (web search) — try GA name then beta name
+      var searchModelsTest = ['groq/compound', 'compound-beta'];
+      for (var ti = 0; ti < searchModelsTest.length; ti++) {
+        try {
+          var searchReply = await callGroq(
+            groqKey,
+            [{ role: 'user', content: 'Who is the current Chief Minister of Karnataka?' }],
+            512, 0.3, searchModelsTest[ti]
+          );
+          testResults.steps.push({ step: 'groqSearch', ok: true, model: searchModelsTest[ti], text: searchReply.slice(0, 300) });
+          break;
+        } catch (e5) {
+          testResults.steps.push({ step: 'groqSearch', ok: false, model: searchModelsTest[ti], error: e5.message.slice(0, 200) });
+        }
       }
 
       if (!geminiKey) return res.json(testResults);
