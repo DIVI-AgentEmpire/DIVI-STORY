@@ -1,7 +1,51 @@
+var path = require('path');
+var fs = require('fs');
+
 var GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 var GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 var GROQ_MODEL = 'openai/gpt-oss-120b';
-var GROQ_SEARCH_MODEL = 'groq/compound';
+
+var CURRENT_FACTS = null;
+function loadCurrentFacts() {
+  if (CURRENT_FACTS) return CURRENT_FACTS;
+  try {
+    var raw = fs.readFileSync(path.join(__dirname, 'current-facts.json'), 'utf8');
+    CURRENT_FACTS = JSON.parse(raw);
+    return CURRENT_FACTS;
+  } catch (e) {
+    console.warn('Could not load current-facts.json:', e.message);
+    return null;
+  }
+}
+
+function matchFacts(userMsg) {
+  var facts = loadCurrentFacts();
+  if (!facts || !facts.officeHolders) return null;
+  var msg = userMsg.toLowerCase();
+  var matched = [];
+  for (var i = 0; i < facts.officeHolders.length; i++) {
+    var entry = facts.officeHolders[i];
+    var pos = entry.position.toLowerCase();
+    var words = pos.split(/\s+/);
+    var hit = false;
+    if (msg.indexOf(pos) >= 0) hit = true;
+    if (!hit) {
+      var keyTerms = words.filter(function (w) { return w.length > 3 && w !== 'of' && w !== 'the'; });
+      var matchCount = 0;
+      for (var j = 0; j < keyTerms.length; j++) {
+        if (msg.indexOf(keyTerms[j]) >= 0) matchCount++;
+      }
+      if (keyTerms.length > 0 && matchCount >= Math.ceil(keyTerms.length * 0.6)) hit = true;
+    }
+    if (!hit && msg.indexOf(entry.holder.toLowerCase()) >= 0) hit = true;
+    if (hit) matched.push(entry);
+  }
+  if (matched.length === 0) return null;
+  var lines = matched.map(function (e) {
+    return e.position + ': ' + e.holder + ' (since ' + e.since + ')';
+  });
+  return lines.join('\n');
+}
 
 var cachedModel = null;
 var cachedAt = 0;
@@ -147,17 +191,23 @@ module.exports = async function handler(req, res) {
       var reply;
 
       if (factual) {
-        // Factual/current-affairs → web search + Groq
-        var webFacts = await searchWeb(userMsg);
-        if (webFacts) {
-          var factSP = systemPrompt + '\n\n[VERIFIED WEB SEARCH RESULTS — These are CURRENT and CORRECT. Base your answer on these facts. Do NOT contradict them.]\n' + webFacts;
-          reply = await callGroq(groqKey, [{ role: 'system', content: factSP }, { role: 'user', content: userMsg }], 2048, 0.3);
-          debug.path = 'web-search';
+        var localFacts = matchFacts(userMsg);
+        if (localFacts) {
+          var factSP = systemPrompt + '\n\n[VERIFIED CURRENT FACTS — These are 100% CORRECT and UP-TO-DATE. You MUST use these facts in your answer. Do NOT contradict them. Do NOT use your training data for these positions.]\n' + localFacts;
+          reply = await callGroq(groqKey, [{ role: 'system', content: factSP }, { role: 'user', content: userMsg }], 2048, 0.2);
+          debug.path = 'current-facts';
         } else {
-          var groqMsgs = [{ role: 'system', content: systemPrompt }].concat(messages);
-          reply = await callGroq(groqKey, groqMsgs, 2048, 0.7);
-          debug.path = 'groq-only';
-          groundingFailed = true;
+          var webFacts = await searchWeb(userMsg);
+          if (webFacts) {
+            var factSP2 = systemPrompt + '\n\n[VERIFIED WEB SEARCH RESULTS — These are CURRENT and CORRECT. Base your answer on these facts. Do NOT contradict them.]\n' + webFacts;
+            reply = await callGroq(groqKey, [{ role: 'system', content: factSP2 }, { role: 'user', content: userMsg }], 2048, 0.3);
+            debug.path = 'web-search';
+          } else {
+            var groqMsgs = [{ role: 'system', content: systemPrompt }].concat(messages);
+            reply = await callGroq(groqKey, groqMsgs, 2048, 0.7);
+            debug.path = 'groq-only';
+            groundingFailed = true;
+          }
         }
 
       } else {
@@ -226,7 +276,11 @@ module.exports = async function handler(req, res) {
     if (action === 'test') {
       var testResults = { geminiKeySet: !!geminiKey, groqKeySet: !!groqKey, steps: [] };
 
-      // Test web search (DuckDuckGo)
+      // Test current-facts.json
+      var factsMatch = matchFacts('Who is the current Chief Minister of Karnataka?');
+      testResults.steps.push({ step: 'currentFacts', ok: !!factsMatch, text: factsMatch || 'No match' });
+
+      // Test web search (Wikipedia)
       try {
         var webResult = await searchWeb('current Chief Minister of Karnataka');
         testResults.steps.push({ step: 'webSearch', ok: !!webResult, text: webResult ? webResult.slice(0, 500) : 'No results' });

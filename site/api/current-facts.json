@@ -1,0 +1,19 @@
+{
+  "_instructions": "Edit this file to keep office holders current. DIVI will answer from this list, not from AI memory. Format: each entry has position, holder, since.",
+  "officeHolders": [
+    { "position": "Chief Minister of Karnataka", "holder": "D. K. Shivakumar", "since": "3 June 2026" },
+    { "position": "Deputy Chief Minister of Karnataka", "holder": "G. Parameshwara", "since": "3 June 2026" },
+    { "position": "Governor of Karnataka", "holder": "Thaawarchand Gehlot", "since": "11 July 2021" },
+    { "position": "Karnataka Assembly Speaker", "holder": "G. S. Patil", "since": "14 August 2026" },
+    { "position": "Karnataka Home Minister", "holder": "Priyank Kharge", "since": "June 2026" },
+    { "position": "Karnataka Finance Minister", "holder": "D. K. Shivakumar", "since": "June 2026" },
+    { "position": "President of India", "holder": "Droupadi Murmu", "since": "25 July 2022" },
+    { "position": "Vice President of India", "holder": "C. P. Radhakrishnan", "since": "12 September 2025" },
+    { "position": "Prime Minister of India", "holder": "Narendra Modi", "since": "26 May 2014" },
+    { "position": "Chief Justice of India", "holder": "Surya Kant", "since": "24 November 2025" },
+    { "position": "Speaker of Lok Sabha", "holder": "Om Birla", "since": "2019 (re-elected 2024)" },
+    { "position": "Union Finance Minister", "holder": "Nirmala Sitharaman", "since": "31 May 2019" },
+    { "position": "RBI Governor", "holder": "Sanjay Malhotra", "since": "11 December 2024" },
+    { "position": "Chief Election Commissioner of India", "holder": "Gyanesh Kumar", "since": "19 February 2025" }
+  ]
+}
