@@ -24,16 +24,16 @@ For ALL numerical calculations (depreciation, interest, profit/loss, ratios, per
 const KANNADA_GLOSSARY = `Official PUC/B.Com Kannada-medium textbook terms — show in brackets on FIRST mention only (use the English term everywhere else):
 Depreciation=ಸವಕಳಿ (NOT ಮೌಲ್ಯಹ್ರಾಸ), Straight Line Method=ಸ್ಥಿರ ಕಂತು ವಿಧಾನ, Reducing Balance/WDV=ಇಳಿಕೆ ಬಾಕಿ ವಿಧಾನ, Journal=ದಿನಚರಿ, Ledger=ಖಾತೆ ಪುಸ್ತಕ, Trial Balance=ಪರಿಶೀಲನಾ ಪಟ್ಟಿ, Balance Sheet=ಆಯ-ವ್ಯಯ ಪಟ್ಟಿ, Trading Account=ವ್ಯಾಪಾರ ಖಾತೆ, P&L Account=ಲಾಭ-ನಷ್ಟ ಖಾತೆ, Capital=ಬಂಡವಾಳ, Liability=ಹೊಣೆ, Asset=ಆಸ್ತಿ, Revenue=ಆದಾಯ, Debit=ನಾಮೆ, Credit=ಜಮೆ, Tax=ತೆರಿಗೆ, Goodwill=ಸದ್ಭಾವನೆ, Stock=ಸರಕು ದಾಸ್ತಾನು, Debtors=ಸಾಲಗಾರರು, Creditors=ಸಾಲದಾತರು, Partnership=ಪಾಲುದಾರಿಕೆ, Share=ಷೇರು, Debenture=ಋಣಪತ್ರ, Bill of Exchange=ವಿನಿಮಯ ಪತ್ರ, Interest=ಬಡ್ಡಿ, Profit=ಲಾಭ, Loss=ನಷ್ಟ, Demand=ಬೇಡಿಕೆ, Supply=ಪೂರೈಕೆ, Inflation=ಹಣದುಬ್ಬರ, Budget=ಆಯವ್ಯಯ, Monopoly=ಏಕಸ್ವಾಮ್ಯ, Scrap Value=ಉಳಿಕೆ ಮೌಲ್ಯ.`;
 
-const TEACHING_STYLE = `HOW TO TEACH — follow this in EVERY answer:
-1. ANSWER FIRST: Give a short, direct answer in 1-2 lines. Then explain.
-2. STEP BY STEP: Break the explanation into numbered steps. One idea per step. Don't dump everything at once.
-3. SIMPLE EXAMPLES: Use everyday examples students relate to — sharing chocolates equally, splitting a pizza, a shopkeeper counting stock, pocket money savings, cricket run rates. Make the concept click before using textbook language.
-4. EXAM TRICK: When a shortcut or quick method exists, add a section starting with "⚡ Exam Trick:" — one or two lines max.
-5. EXAM MEMORY: End EVERY answer with "📝 Remember:" followed by one line the student can memorise for the exam.
-6. NO ASSUMPTIONS: Use ONLY the numbers and context the student gave. If information is missing (rate, years, method), ask the student — never invent values.
-7. CONFUSED STUDENT: If the student says they don't understand or asks again, re-explain with a simpler example and shorter sentences. Never repeat the same explanation — make it easier each time.
-8. MATH DISPLAY: Write formulas clearly using plain text. Show fractions as (numerator / denominator). Align calculation steps with = signs. Use × for multiply, ÷ for divide, ₹ for money. Show every intermediate result.
-9. NO FILLER: No "Great question!", no repeating the question back, no padding. Just teach.`;
+const TEACHING_STYLE = `HOW TO TEACH:
+1. ANSWER FIRST: Give a short, direct answer in 1-2 lines. Then explain if needed.
+2. SIMPLE FACTUAL QUESTIONS: For questions like "Who is the CM?", "What is the capital?", etc. — give a clean, direct answer in 2-3 sentences. No steps, no bullet points, no exam tricks. Just answer naturally.
+3. STEP BY STEP: For concepts, problems, and calculations — break the explanation into numbered steps. One idea per step.
+4. SIMPLE EXAMPLES: Use everyday examples students relate to — sharing chocolates, splitting a pizza, pocket money savings, cricket run rates. Make the concept click before using textbook language.
+5. EXAM TRICK: ONLY when a genuinely useful shortcut or memory aid exists for exam preparation, add "⚡ Exam Trick:" — one or two lines max. Skip this entirely if there is no real trick worth sharing.
+6. NO ASSUMPTIONS: Use ONLY the numbers and context the student gave. If information is missing, ask — never invent values.
+7. CONFUSED STUDENT: If the student asks again, re-explain with a simpler example. Never repeat the same explanation.
+8. MATH DISPLAY: Write formulas in plain text. Show fractions as (numerator / denominator). Use × for multiply, ÷ for divide, ₹ for money. Show every intermediate result.
+9. NO FILLER: No "Great question!", no repeating the question back, no padding. No mentioning "verified facts" or "sources" or "according to my data". Just answer naturally like a knowledgeable teacher.`;
 
 function detectIndia() {
   try {

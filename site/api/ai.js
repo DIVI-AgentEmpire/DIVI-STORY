@@ -193,13 +193,13 @@ module.exports = async function handler(req, res) {
       if (factual) {
         var localFacts = matchFacts(userMsg);
         if (localFacts) {
-          var factSP = systemPrompt + '\n\n[VERIFIED CURRENT FACTS — These are 100% CORRECT and UP-TO-DATE. You MUST use these facts in your answer. Do NOT contradict them. Do NOT use your training data for these positions.]\n' + localFacts;
+          var factSP = systemPrompt + '\n\n[USE THESE FACTS — they are correct and current. Use them in your answer. Do NOT contradict them. Do NOT use your training data for these positions. Answer naturally and directly — do NOT mention "verified facts", "sources", "according to my data", or anything about where the information came from. For simple fact questions, give a clean 2-3 sentence answer without steps or bullet points.]\n' + localFacts;
           reply = await callGroq(groqKey, [{ role: 'system', content: factSP }, { role: 'user', content: userMsg }], 2048, 0.2);
           debug.path = 'current-facts';
         } else {
           var webFacts = await searchWeb(userMsg);
           if (webFacts) {
-            var factSP2 = systemPrompt + '\n\n[VERIFIED WEB SEARCH RESULTS — These are CURRENT and CORRECT. Base your answer on these facts. Do NOT contradict them.]\n' + webFacts;
+            var factSP2 = systemPrompt + '\n\n[USE THESE FACTS — they are current and correct. Base your answer on them. Do NOT contradict them. Answer naturally — do NOT mention "sources", "verified facts", or where the information came from.]\n' + webFacts;
             reply = await callGroq(groqKey, [{ role: 'system', content: factSP2 }, { role: 'user', content: userMsg }], 2048, 0.3);
             debug.path = 'web-search';
           } else {
