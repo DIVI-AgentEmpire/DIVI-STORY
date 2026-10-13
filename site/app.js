@@ -1201,8 +1201,12 @@ function renderMarkdown(text) {
   html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>');
   html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>');
   html = html.replace(/^&gt; (.+)$/gm, '<blockquote>$1</blockquote>');
-  html = html.replace(/^[\-\*] (.+)$/gm, '<li>$1</li>');
-  html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
+  html = html.replace(/^( *)[\-\*] (.+)$/gm, function(_, spaces, content) {
+    var depth = Math.floor(spaces.length / 2);
+    if (depth > 0) return '<li class="nested-' + depth + '">' + content + '</li>';
+    return '<li>' + content + '</li>';
+  });
+  html = html.replace(/((?:<li[^>]*>.*<\/li>\n?)+)/g, '<ul>$1</ul>');
   html = html.replace(/^\d+\. (.+)$/gm, '<li>$1</li>');
   html = html.replace(/\*([^\n*]+)\*/g, '<em>$1</em>');
   html = html.replace(/^---$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">');
@@ -1439,30 +1443,41 @@ function startQuiz() {
   quizData = null;
   quizIndex = 0;
   quizScore = 0;
-  document.getElementById('quiz-body').innerHTML = '<div class="quiz-loading" id="quiz-loading"><div class="typing-indicator" style="justify-content:center"><span></span><span></span><span></span></div><br>Generating exam-style questions...</div>';
   document.getElementById('quiz-modal').classList.add('open');
-  generateQuiz();
+  document.getElementById('quiz-body').innerHTML = `
+    <div style="text-align:center;padding:24px 12px">
+      <p style="font-weight:600;margin-bottom:16px">How many questions?</p>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button onclick="launchQuiz(5)" style="padding:12px 28px;border-radius:10px;background:var(--purple);color:#fff;font-weight:600;font-size:1rem;border:none;cursor:pointer">5 Questions</button>
+        <button onclick="launchQuiz(10)" style="padding:12px 28px;border-radius:10px;background:var(--purple);color:#fff;font-weight:600;font-size:1rem;border:none;cursor:pointer">10 Questions</button>
+      </div>
+    </div>`;
+}
+
+function launchQuiz(count) {
+  state.quizCount = count;
+  document.getElementById('quiz-body').innerHTML = '<div class="quiz-loading" id="quiz-loading"><div class="typing-indicator" style="justify-content:center"><span></span><span></span><span></span></div><br>Generating ' + count + ' exam-style questions...</div>';
+  generateQuiz(count);
 }
 
 function closeQuizModal() {
   document.getElementById('quiz-modal').classList.remove('open');
 }
 
-async function generateQuiz() {
+async function generateQuiz(count) {
   if (!ensureApiKey()) return;
-  const pageText = state.pdfPageTexts[state.pdfCurrentPage] || Object.values(state.pdfPageTexts)[0] || '';
-  const truncated = pageText.slice(0, 4000);
+  count = count || 5;
+  const allPages = Object.values(state.pdfPageTexts || {}).filter(t => t.trim().length > 0);
+  const pdfText = allPages.join('\n\n').slice(0, 8000);
 
-  const systemPrompt = `You are an exam question generator. Generate exactly 3 multiple choice questions based on the provided text. Format your response as valid JSON array with this exact structure:
-[
-  {
-    "question": "The question text",
-    "options": ["Option A", "Option B", "Option C"],
-    "correct": 0,
-    "explanation": "Brief explanation of the correct answer"
-  }
-]
-Make questions in past paper exam style. Ensure only one correct answer per question. Return ONLY the JSON array, no other text.`;
+  const systemPrompt = `You are an exam question generator. Generate exactly ${count} multiple choice questions based ONLY on the provided PDF text. Rules:
+1. Every question MUST come directly from the PDF content. Do NOT add questions from outside knowledge.
+2. Cover different parts of the text — spread questions across the material.
+3. Each question must have exactly 4 options (A, B, C, D) with only one correct answer.
+4. Add a brief explanation for the correct answer. Only include an exam trick in the explanation if there is a genuinely useful shortcut or memory aid — otherwise just explain why the answer is correct.
+5. Format as a valid JSON array:
+[{"question":"...","options":["A","B","C","D"],"correct":0,"explanation":"..."}]
+Return ONLY the JSON array, no other text.`;
 
   try {
     const res = await fetch(AI_API_URL, {
@@ -1471,7 +1486,7 @@ Make questions in past paper exam style. Ensure only one correct answer per ques
       body: JSON.stringify({
         action: 'quiz',
         systemPrompt: systemPrompt,
-        userMsg: 'Generate 3 MCQ questions from this text:\n\n' + truncated,
+        userMsg: 'Generate ' + count + ' MCQ questions from this PDF text ONLY:\n\n' + pdfText,
       }),
     });
 
@@ -1505,7 +1520,7 @@ function renderQuizQuestion() {
   }
 
   const q = quizData[quizIndex];
-  const letters = ['A', 'B', 'C'];
+  const letters = ['A', 'B', 'C', 'D'];
   const dots = quizData.map((_, i) => {
     let cls = 'quiz-dot';
     if (i < quizIndex) cls += ' done';

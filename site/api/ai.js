@@ -267,7 +267,7 @@ module.exports = async function handler(req, res) {
       var quizReply = await callGroq(
         groqKey,
         [{ role: 'system', content: quizSystem }, { role: 'user', content: quizUser }],
-        1500, 0.5
+        4096, 0.5
       );
       return res.json({ reply: quizReply });
     }
